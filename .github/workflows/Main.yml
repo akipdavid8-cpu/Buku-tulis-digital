@@ -1,0 +1,45 @@
+name: Build Buku Tulis Digital APK
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Capacitor
+        run: |
+          npm install @capacitor/core @capacitor/cli @capacitor/android
+
+      - name: Initialize Capacitor
+        run: |
+          npx cap init "Buku Tulis Digital" "com.bukutulisdigital.app" --web-dir=.
+
+      - name: Add Android Platform
+        run: npx cap add android
+
+      - name: Sync Project
+        run: npx cap sync android
+
+      - name: Build Debug APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Buku-Tulis-Digital-APK
+          path: android/app/build/outputs/apk/debug/app-debug.apk
