@@ -18,6 +18,17 @@ jobs:
         with:
           node-version: 20
 
+      - name: Create WWW Folder
+        run: |
+          mkdir www
+          cp index.html www/
+          cp *.css www/ || true
+          cp *.js www/ || true
+
+          if [ -d assets ]; then
+            cp -r assets www/
+          fi
+
       - name: Install Capacitor
         run: |
           npm install @capacitor/core
@@ -26,13 +37,13 @@ jobs:
 
       - name: Initialize Capacitor
         run: |
-          npx cap init "Buku Tulis Digital" "com.bukutulisdigital.app" --web-dir=.
+          npx cap init "Buku Tulis Digital" "com.bukutulisdigital.app" --web-dir=www
 
-      - name: Add Android Platform
+      - name: Add Android
         run: |
           npx cap add android
 
-      - name: Copy HTML CSS JS to Android
+      - name: Sync Android
         run: |
           npx cap sync android
 
