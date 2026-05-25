@@ -1,612 +1,503 @@
-/* ===========================
-   BUKU TULIS DIGITAL - JS
-   =========================== */
+/* BUKU TULIS DIGITAL PRO - app.js */
 
-// ─── State ───────────────────────────────────────────────
-const state = {
-  pages: [],          // Array of page data
-  currentPage: 0,     // Index
-  tool: 'text',       // text | draw | sign | image | erase
-  penColor: '#1a1a2e',
-  penSize: 3,
-  drawing: false,
-  lastX: 0,
-  lastY: 0,
-};
+// ── State ──
+var state = { tool:'text', penColor:'#1a1a2e', penSize:3 };
+var pages = [];
+var currentPage = 0;
+var currentFont = "'Caveat',cursive";
+var isDrawing = false, lastX = 0, lastY = 0;
+var signDrawing = false, signLastX = 0, signLastY = 0;
+var autoTimer = null;
 
-// ─── DOM ─────────────────────────────────────────────────
-const pageList       = document.getElementById('pageList');
-const btnAddPage     = document.getElementById('btnAddPage');
-const btnPrevPage    = document.getElementById('btnPrevPage');
-const btnNextPage    = document.getElementById('btnNextPage');
-const btnDeletePage  = document.getElementById('btnDeletePage');
-const currentPageLbl = document.getElementById('currentPageLabel');
+// ── DOM ──
+var sidebar         = document.getElementById('sidebar');
+var sidebarOverlay  = document.getElementById('sidebarOverlay');
+var hamburger       = document.getElementById('hamburger');
+var pageList        = document.getElementById('pageList');
+var btnAddPage      = document.getElementById('btnAddPage');
+var btnPrevPage     = document.getElementById('btnPrevPage');
+var btnNextPage     = document.getElementById('btnNextPage');
+var btnDeletePage   = document.getElementById('btnDeletePage');
+var pageTitleInput  = document.getElementById('pageTitleInput');
+var currentPageLbl  = document.getElementById('currentPageLabel');
+var notebookPage    = document.getElementById('notebookPage');
+var drawCanvas      = document.getElementById('drawCanvas');
+var ctx             = drawCanvas.getContext('2d');
+var textLayer       = document.getElementById('textLayer');
+var mainTextBlock   = document.getElementById('mainTextBlock');
+var imageLayer      = document.getElementById('imageLayer');
+var imageInput      = document.getElementById('imageInput');
+var txtInput        = document.getElementById('txtInput');
+var signOverlay     = document.getElementById('signOverlay');
+var signCanvas      = document.getElementById('signCanvas');
+var sctx            = signCanvas.getContext('2d');
+var toolText        = document.getElementById('toolText');
+var toolDraw        = document.getElementById('toolDraw');
+var toolErase       = document.getElementById('toolErase');
+var toolImage       = document.getElementById('toolImage');
+var toolSign        = document.getElementById('toolSign');
+var fontStyleSelect = document.getElementById('fontStyleSelect');
+var penColorInput   = document.getElementById('penColor');
+var penSizeInput    = document.getElementById('penSize');
+var penSizeLabel    = document.getElementById('penSizeLabel');
+var btnSaveTxt      = document.getElementById('btnSaveTxt');
+var btnLoadTxt      = document.getElementById('btnLoadTxt');
+var btnExportPNG    = document.getElementById('btnExportPNG');
+var btnExportPDF    = document.getElementById('btnExportPDF');
+var btnHistory      = document.getElementById('btnHistory');
+var btnInfo         = document.getElementById('btnInfo');
+var btnClearSign    = document.getElementById('btnClearSign');
+var btnSaveSign     = document.getElementById('btnSaveSign');
+var btnCancelSign   = document.getElementById('btnCancelSign');
+var toast           = document.getElementById('toast');
 
-const notebookPage  = document.getElementById('notebookPage');
-const drawCanvas    = document.getElementById('drawCanvas');
-const textLayer     = document.getElementById('textLayer');
-const mainTextBlock = document.getElementById('mainTextBlock');
-const imageLayer    = document.getElementById('imageLayer');
-const imageInput    = document.getElementById('imageInput');
-const signOverlay   = document.getElementById('signOverlay');
-const signCanvas    = document.getElementById('signCanvas');
+// ════════════════════════════
+// FIX 1: SIDEBAR BUKA/TUTUP
+// ════════════════════════════
+function openSidebar(){
+  sidebar.classList.add('show');
+  sidebarOverlay.classList.add('show');
+}
+function closeSidebar(){
+  sidebar.classList.remove('show');
+  sidebarOverlay.classList.remove('show');
+}
+hamburger.addEventListener('click', function(e){
+  e.stopPropagation();
+  sidebar.classList.contains('show') ? closeSidebar() : openSidebar();
+});
+sidebarOverlay.addEventListener('click', closeSidebar);
 
-const toolText  = document.getElementById('toolText');
-const toolDraw  = document.getElementById('toolDraw');
-const toolSign  = document.getElementById('toolSign');
-const toolImage = document.getElementById('toolImage');
-const toolErase = document.getElementById('toolErase');
-
-const drawOptions = document.getElementById('drawOptions');
-const penColor    = document.getElementById('penColor');
-const penSize     = document.getElementById('penSize');
-const penSizeLabel= document.getElementById('penSizeLabel');
-
-const btnExportPNG = document.getElementById('btnExportPNG');
-const btnExportPDF = document.getElementById('btnExportPDF');
-const toast        = document.getElementById('toast');
-const hamburger    = document.getElementById('hamburger');
-const sidebar      = document.getElementById('sidebar');
-const main         = document.getElementById('main');
-
-// Signature
-const btnClearSign  = document.getElementById('btnClearSign');
-const btnSaveSign   = document.getElementById('btnSaveSign');
-const btnCancelSign = document.getElementById('btnCancelSign');
-
-// ─── Canvas ctx ──────────────────────────────────────────
-const ctx = drawCanvas.getContext('2d');
-const sctx = signCanvas.getContext('2d');
-
-// ─── Page Data ───────────────────────────────────────────
-function createPage() {
-  return {
-    canvasData: null,   // ImageData URL
-    textContent: '',    // HTML content
-    images: [],         // [{src, x, y}]
-  };
+function closeIfMobile(){
+  if(window.innerWidth <= 700) setTimeout(closeSidebar, 120);
 }
 
-function savePage() {
-  const p = state.pages[state.currentPage];
-  if (!p) return;
-  p.canvasData   = drawCanvas.toDataURL();
-  p.textContent  = mainTextBlock.innerHTML;
-  p.images       = [];
-  imageLayer.querySelectorAll('.pasted-image').forEach(el => {
-    p.images.push({
-      src: el.querySelector('img').src,
-      x: parseInt(el.style.left) || 50,
-      y: parseInt(el.style.top)  || 50,
-      w: el.offsetWidth,
-      h: el.offsetHeight,
-    });
-  });
+// ── Page Data ──
+function createPage(){
+  return { title:'', canvasData:null, textContent:'', font:currentFont, images:[], created: new Date().toLocaleString('id-ID') };
 }
 
-function loadPage(index) {
-  const p = state.pages[index];
-  if (!p) return;
+function savePage(){
+  var p = pages[currentPage];
+  if(!p) return;
+  p.title       = pageTitleInput.value;
+  p.canvasData  = drawCanvas.toDataURL();
+  p.textContent = mainTextBlock.innerHTML;
+  p.font        = currentFont;
+  p.images      = [];
+  var imgs = imageLayer.querySelectorAll('.pasted-image');
+  for(var i=0;i<imgs.length;i++){
+    p.images.push({ src:imgs[i].querySelector('img').src, x:parseInt(imgs[i].style.left)||50, y:parseInt(imgs[i].style.top)||50 });
+  }
+}
 
-  // Resize canvas
+function loadPage(idx){
+  var p = pages[idx];
+  if(!p) return;
   resizeCanvas();
-
-  // Clear canvas
-  ctx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
-
-  // Restore canvas drawing
-  if (p.canvasData) {
-    const img = new Image();
-    img.onload = () => ctx.drawImage(img, 0, 0);
+  ctx.clearRect(0,0,drawCanvas.width,drawCanvas.height);
+  if(p.canvasData && p.canvasData!=='data:,'){
+    var img = new Image();
+    img.onload = function(){ ctx.drawImage(img,0,0); };
     img.src = p.canvasData;
   }
-
-  // Restore text
   mainTextBlock.innerHTML = p.textContent || '';
-
-  // Restore images
-  imageLayer.innerHTML = '';
-  (p.images || []).forEach(imgData => {
-    placeImage(imgData.src, imgData.x, imgData.y);
-  });
-
-  currentPageLbl.textContent = `Halaman ${index + 1}`;
+  pageTitleInput.value    = p.title || '';
+  currentFont = p.font || "'Caveat',cursive";
+  mainTextBlock.style.fontFamily = currentFont;
+  for(var i=0;i<fontStyleSelect.options.length;i++){
+    if(fontStyleSelect.options[i].value === currentFont){ fontStyleSelect.selectedIndex=i; break; }
+  }
+  imageLayer.innerHTML='';
+  for(var j=0;j<p.images.length;j++) placeImage(p.images[j].src, p.images[j].x, p.images[j].y);
+  currentPageLbl.textContent = 'Halaman '+(idx+1)+' / '+pages.length+(p.title?' — '+p.title:'');
 }
 
-function renderPageList() {
-  pageList.innerHTML = '';
-  state.pages.forEach((_, i) => {
-    const item = document.createElement('div');
-    item.className = 'page-item' + (i === state.currentPage ? ' active' : '');
-    item.textContent = `📄 Halaman ${i + 1}`;
-    item.addEventListener('click', () => switchPage(i));
-    pageList.appendChild(item);
-  });
-}
-
-function switchPage(index) {
-  savePage();
-  state.currentPage = index;
-  loadPage(index);
-  renderPageList();
-}
-
-// ─── Canvas Resize ───────────────────────────────────────
-function resizeCanvas() {
-  const rect = notebookPage.getBoundingClientRect();
-  const w = Math.round(rect.width);
-  const h = Math.max(Math.round(rect.height), 900);
-  if (drawCanvas.width !== w || drawCanvas.height !== h) {
-    // Preserve drawing
-    const tmp = drawCanvas.toDataURL();
-    drawCanvas.width  = w;
-    drawCanvas.height = h;
-    if (tmp && tmp !== 'data:,') {
-      const img = new Image();
-      img.onload = () => ctx.drawImage(img, 0, 0);
-      img.src = tmp;
-    }
+function renderPageList(){
+  pageList.innerHTML='';
+  for(var i=0;i<pages.length;i++){
+    (function(idx){
+      var d=document.createElement('div');
+      d.className='page-item'+(idx===currentPage?' active':'');
+      d.textContent='📄 '+(pages[idx].title||'Halaman '+(idx+1));
+      d.addEventListener('click',function(){ switchPage(idx); closeIfMobile(); });
+      pageList.appendChild(d);
+    })(i);
   }
 }
 
-// ─── Tool switching ──────────────────────────────────────
-const toolBtns = [toolText, toolDraw, toolSign, toolImage, toolErase];
+function switchPage(idx){
+  savePage(); currentPage=idx; loadPage(idx); renderPageList();
+}
 
-function setTool(name) {
+// ── Canvas Resize ──
+function resizeCanvas(){
+  var w = notebookPage.offsetWidth;
+  var h = Math.max(notebookPage.offsetHeight, 1000);
+  if(drawCanvas.width===w && drawCanvas.height===h) return;
+  var tmp = drawCanvas.toDataURL();
+  drawCanvas.width=w; drawCanvas.height=h;
+  if(tmp && tmp!=='data:,'){
+    var img=new Image();
+    img.onload=function(){ ctx.drawImage(img,0,0); };
+    img.src=tmp;
+  }
+}
+
+// ════════════════════════════
+// FIX 2: TOOL — MENULIS & GAMBAR
+// Kunci: atur pointer-events tiap layer
+// ════════════════════════════
+function setTool(name){
   state.tool = name;
-  toolBtns.forEach(b => b.classList.remove('active'));
-  drawCanvas.classList.remove('active', 'eraser');
-  textLayer.classList.remove('active');
-  imageLayer.classList.remove('active');
-  drawOptions.style.display = 'none';
 
-  switch (name) {
-    case 'text':
-      toolText.classList.add('active');
-      textLayer.classList.add('active');
-      mainTextBlock.focus();
-      break;
-    case 'draw':
-      toolDraw.classList.add('active');
-      drawCanvas.classList.add('active');
-      drawOptions.style.display = 'block';
-      break;
-    case 'erase':
-      toolErase.classList.add('active');
-      drawCanvas.classList.add('active', 'eraser');
-      drawOptions.style.display = 'block';
-      break;
-    case 'sign':
-      toolSign.classList.add('active');
-      openSignPad();
-      break;
-    case 'image':
-      toolImage.classList.add('active');
-      imageLayer.classList.add('active');
-      imageInput.click();
-      break;
+  // Reset semua tool button
+  var btns = document.querySelectorAll('.tool-btn');
+  for(var i=0;i<btns.length;i++) btns[i].classList.remove('active');
+
+  // Reset pointer-events semua layer
+  drawCanvas.style.pointerEvents  = 'none';
+  drawCanvas.style.cursor         = 'default';
+  textLayer.style.pointerEvents   = 'none';
+  mainTextBlock.style.pointerEvents = 'none';
+  imageLayer.style.pointerEvents  = 'none';
+
+  if(name==='text'){
+    toolText.classList.add('active');
+    // TEXT LAYER aktif, canvas tidak aktif
+    textLayer.style.pointerEvents   = 'auto';
+    mainTextBlock.style.pointerEvents = 'auto';
+    mainTextBlock.focus();
+
+  } else if(name==='draw'){
+    toolDraw.classList.add('active');
+    // CANVAS aktif
+    drawCanvas.style.pointerEvents = 'auto';
+    drawCanvas.style.cursor        = 'crosshair';
+
+  } else if(name==='erase'){
+    toolErase.classList.add('active');
+    drawCanvas.style.pointerEvents = 'auto';
+    drawCanvas.style.cursor        = 'cell';
+
+  } else if(name==='image'){
+    toolImage.classList.add('active');
+    imageLayer.style.pointerEvents = 'auto';
+    imageInput.click();
+
+  } else if(name==='sign'){
+    toolSign.classList.add('active');
+    openSignPad();
   }
 }
 
-toolText.addEventListener('click',  () => setTool('text'));
-toolDraw.addEventListener('click',  () => setTool('draw'));
-toolSign.addEventListener('click',  () => setTool('sign'));
-toolImage.addEventListener('click', () => setTool('image'));
-toolErase.addEventListener('click', () => setTool('erase'));
+toolText.addEventListener('click',  function(){ setTool('text');  closeIfMobile(); });
+toolDraw.addEventListener('click',  function(){ setTool('draw');  closeIfMobile(); });
+toolErase.addEventListener('click', function(){ setTool('erase'); closeIfMobile(); });
+toolImage.addEventListener('click', function(){ setTool('image'); closeIfMobile(); });
+toolSign.addEventListener('click',  function(){ setTool('sign');  closeIfMobile(); });
 
-// ─── Drawing ─────────────────────────────────────────────
-function getPos(e) {
-  const rect = drawCanvas.getBoundingClientRect();
-  const scaleX = drawCanvas.width  / rect.width;
-  const scaleY = drawCanvas.height / rect.height;
-  let clientX, clientY;
-  if (e.touches) {
-    clientX = e.touches[0].clientX;
-    clientY = e.touches[0].clientY;
+// ════════════════════════════
+// FIX 3: DRAWING (mouse + touch)
+// ════════════════════════════
+function getXY(e, el){
+  var rect = el.getBoundingClientRect();
+  var sx = el.width / rect.width;
+  var sy = el.height / rect.height;
+  var cx = e.touches ? e.touches[0].clientX : e.clientX;
+  var cy = e.touches ? e.touches[0].clientY : e.clientY;
+  return { x:(cx-rect.left)*sx, y:(cy-rect.top)*sy };
+}
+
+drawCanvas.addEventListener('mousedown', function(e){
+  if(state.tool!=='draw' && state.tool!=='erase') return;
+  isDrawing=true;
+  var p=getXY(e,drawCanvas); lastX=p.x; lastY=p.y;
+  // titik awal
+  ctx.beginPath(); ctx.arc(lastX,lastY,state.penSize/2,0,Math.PI*2);
+  ctx.globalCompositeOperation = state.tool==='erase'?'destination-out':'source-over';
+  ctx.fillStyle = state.tool==='erase'?'rgba(0,0,0,1)':state.penColor;
+  ctx.fill(); ctx.globalCompositeOperation='source-over';
+});
+drawCanvas.addEventListener('touchstart', function(e){
+  if(state.tool!=='draw' && state.tool!=='erase') return;
+  e.preventDefault(); isDrawing=true;
+  var p=getXY(e,drawCanvas); lastX=p.x; lastY=p.y;
+}, {passive:false});
+
+function doDraw(e){
+  if(!isDrawing) return;
+  if(e.touches) e.preventDefault();
+  var p=getXY(e,drawCanvas);
+  ctx.beginPath(); ctx.moveTo(lastX,lastY); ctx.lineTo(p.x,p.y);
+  ctx.lineCap=ctx.lineJoin='round';
+  ctx.lineWidth=state.penSize;
+  if(state.tool==='erase'){
+    ctx.globalCompositeOperation='destination-out';
+    ctx.strokeStyle='rgba(0,0,0,1)';
   } else {
-    clientX = e.clientX;
-    clientY = e.clientY;
+    ctx.globalCompositeOperation='source-over';
+    ctx.strokeStyle=state.penColor;
   }
-  return {
-    x: (clientX - rect.left) * scaleX,
-    y: (clientY - rect.top)  * scaleY,
-  };
+  ctx.stroke(); lastX=p.x; lastY=p.y;
 }
+function stopDraw(){ isDrawing=false; ctx.globalCompositeOperation='source-over'; }
 
-function startDraw(e) {
-  if (!['draw','erase'].includes(state.tool)) return;
-  e.preventDefault();
-  state.drawing = true;
-  const {x, y} = getPos(e);
-  state.lastX = x;
-  state.lastY = y;
-  ctx.beginPath();
-  ctx.arc(x, y, state.penSize / 2, 0, Math.PI * 2);
-  if (state.tool === 'erase') {
-    ctx.globalCompositeOperation = 'destination-out';
-    ctx.fillStyle = 'rgba(0,0,0,1)';
-  } else {
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.fillStyle = state.penColor;
-  }
-  ctx.fill();
-}
+drawCanvas.addEventListener('mousemove',  doDraw);
+drawCanvas.addEventListener('touchmove',  doDraw, {passive:false});
+drawCanvas.addEventListener('mouseup',    stopDraw);
+drawCanvas.addEventListener('mouseleave', stopDraw);
+drawCanvas.addEventListener('touchend',   stopDraw);
 
-function moveDraw(e) {
-  if (!state.drawing) return;
-  e.preventDefault();
-  const {x, y} = getPos(e);
-  ctx.beginPath();
-  ctx.moveTo(state.lastX, state.lastY);
-  ctx.lineTo(x, y);
-  ctx.lineCap  = 'round';
-  ctx.lineJoin = 'round';
-  ctx.lineWidth = state.penSize;
-  if (state.tool === 'erase') {
-    ctx.globalCompositeOperation = 'destination-out';
-    ctx.strokeStyle = 'rgba(0,0,0,1)';
-  } else {
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.strokeStyle = state.penColor;
-  }
-  ctx.stroke();
-  state.lastX = x;
-  state.lastY = y;
-}
-
-function endDraw() {
-  state.drawing = false;
-  ctx.globalCompositeOperation = 'source-over';
-}
-
-drawCanvas.addEventListener('mousedown',  startDraw);
-drawCanvas.addEventListener('mousemove',  moveDraw);
-drawCanvas.addEventListener('mouseup',    endDraw);
-drawCanvas.addEventListener('mouseleave', endDraw);
-drawCanvas.addEventListener('touchstart', startDraw, { passive: false });
-drawCanvas.addEventListener('touchmove',  moveDraw,  { passive: false });
-drawCanvas.addEventListener('touchend',   endDraw);
-
-// Pen options
-penColor.addEventListener('input', e => state.penColor = e.target.value);
-penSize.addEventListener('input', e => {
-  state.penSize = parseInt(e.target.value);
-  penSizeLabel.textContent = state.penSize + 'px';
+// ── Font & Pen ──
+fontStyleSelect.addEventListener('change', function(){
+  currentFont = this.value;
+  mainTextBlock.style.fontFamily = currentFont;
+  showToast('Gaya tulisan diubah ✓');
+});
+penColorInput.addEventListener('input', function(){ state.penColor=this.value; });
+penSizeInput.addEventListener('input',  function(){
+  state.penSize=parseInt(this.value);
+  penSizeLabel.textContent=state.penSize+'px';
 });
 
-// ─── Signature Pad ───────────────────────────────────────
-let signDrawing = false, signLastX = 0, signLastY = 0;
-
-function openSignPad() {
-  sctx.clearRect(0, 0, signCanvas.width, signCanvas.height);
-  signOverlay.style.display = 'flex';
-}
-
-function getSignPos(e) {
-  const rect = signCanvas.getBoundingClientRect();
-  const sx = signCanvas.width  / rect.width;
-  const sy = signCanvas.height / rect.height;
-  let cx, cy;
-  if (e.touches) { cx = e.touches[0].clientX; cy = e.touches[0].clientY; }
-  else           { cx = e.clientX;             cy = e.clientY; }
-  return { x: (cx - rect.left) * sx, y: (cy - rect.top) * sy };
-}
-
-signCanvas.addEventListener('mousedown',  e => { signDrawing = true; const p = getSignPos(e); signLastX = p.x; signLastY = p.y; });
-signCanvas.addEventListener('touchstart', e => { e.preventDefault(); signDrawing = true; const p = getSignPos(e); signLastX = p.x; signLastY = p.y; }, { passive: false });
-
-signCanvas.addEventListener('mousemove', e => {
-  if (!signDrawing) return;
-  const {x, y} = getSignPos(e);
-  sctx.beginPath();
-  sctx.moveTo(signLastX, signLastY);
-  sctx.lineTo(x, y);
-  sctx.strokeStyle = '#1a1a2e';
-  sctx.lineWidth = 2.5;
-  sctx.lineCap = 'round';
-  sctx.stroke();
-  signLastX = x; signLastY = y;
+// ── Page title ──
+pageTitleInput.addEventListener('input', function(){
+  var p=pages[currentPage]; if(p) p.title=this.value;
+  currentPageLbl.textContent='Halaman '+(currentPage+1)+' / '+pages.length+(this.value?' — '+this.value:'');
+  renderPageList();
 });
-signCanvas.addEventListener('touchmove', e => {
-  e.preventDefault();
-  if (!signDrawing) return;
-  const {x, y} = getSignPos(e);
-  sctx.beginPath();
-  sctx.moveTo(signLastX, signLastY);
-  sctx.lineTo(x, y);
-  sctx.strokeStyle = '#1a1a2e';
-  sctx.lineWidth = 2.5;
-  sctx.lineCap = 'round';
-  sctx.stroke();
-  signLastX = x; signLastY = y;
-}, { passive: false });
 
-signCanvas.addEventListener('mouseup',  () => signDrawing = false);
-signCanvas.addEventListener('touchend', () => signDrawing = false);
+// ── Signature ──
+function openSignPad(){
+  sctx.clearRect(0,0,signCanvas.width,signCanvas.height);
+  signOverlay.style.display='flex';
+}
 
-btnClearSign.addEventListener('click', () => sctx.clearRect(0, 0, signCanvas.width, signCanvas.height));
-
-btnSaveSign.addEventListener('click', () => {
-  const dataUrl = signCanvas.toDataURL();
-  placeImage(dataUrl, 80, 600);
-  signOverlay.style.display = 'none';
-  setTool('text');
+signCanvas.addEventListener('mousedown',  function(e){ signDrawing=true; var p=getXY(e,signCanvas); signLastX=p.x; signLastY=p.y; });
+signCanvas.addEventListener('touchstart', function(e){ e.preventDefault(); signDrawing=true; var p=getXY(e,signCanvas); signLastX=p.x; signLastY=p.y; }, {passive:false});
+function doSign(e){
+  if(!signDrawing) return;
+  if(e.touches) e.preventDefault();
+  var p=getXY(e,signCanvas);
+  sctx.beginPath(); sctx.moveTo(signLastX,signLastY); sctx.lineTo(p.x,p.y);
+  sctx.strokeStyle='#1a1a2e'; sctx.lineWidth=2.5; sctx.lineCap='round'; sctx.stroke();
+  signLastX=p.x; signLastY=p.y;
+}
+signCanvas.addEventListener('mousemove',  doSign);
+signCanvas.addEventListener('touchmove',  doSign, {passive:false});
+signCanvas.addEventListener('mouseup',    function(){ signDrawing=false; });
+signCanvas.addEventListener('touchend',   function(){ signDrawing=false; });
+btnClearSign.addEventListener('click', function(){ sctx.clearRect(0,0,signCanvas.width,signCanvas.height); });
+btnSaveSign.addEventListener('click',  function(){
+  placeImage(signCanvas.toDataURL(), 80, 600);
+  signOverlay.style.display='none'; setTool('text');
   showToast('Tanda tangan disimpan ✓');
 });
+btnCancelSign.addEventListener('click', function(){ signOverlay.style.display='none'; setTool('text'); });
 
-btnCancelSign.addEventListener('click', () => {
-  signOverlay.style.display = 'none';
-  setTool('text');
+// ── Image upload ──
+imageInput.addEventListener('change', function(e){
+  var file=e.target.files[0]; if(!file) return;
+  var reader=new FileReader();
+  reader.onload=function(ev){ placeImage(ev.target.result,80,80); showToast('Gambar ditambahkan ✓'); };
+  reader.readAsDataURL(file); e.target.value='';
 });
 
-// ─── Image Paste ─────────────────────────────────────────
-imageInput.addEventListener('change', e => {
-  const file = e.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = ev => {
-    placeImage(ev.target.result, 80, 80);
-    showToast('Gambar ditempelkan ✓');
-  };
-  reader.readAsDataURL(file);
-  e.target.value = '';
-});
-
-// Drag-to-paste from clipboard
-document.addEventListener('paste', e => {
-  const items = e.clipboardData.items;
-  for (const item of items) {
-    if (item.type.startsWith('image/')) {
-      const blob = item.getAsFile();
-      const reader = new FileReader();
-      reader.onload = ev => placeImage(ev.target.result, 80, 80);
-      reader.readAsDataURL(blob);
-      showToast('Gambar ditempelkan dari clipboard ✓');
+document.addEventListener('paste', function(e){
+  for(var i=0;i<e.clipboardData.items.length;i++){
+    if(e.clipboardData.items[i].type.startsWith('image/')){
+      (function(blob){
+        var r=new FileReader();
+        r.onload=function(ev){ placeImage(ev.target.result,80,80); showToast('Gambar dari clipboard ✓'); };
+        r.readAsDataURL(blob);
+      })(e.clipboardData.items[i].getAsFile());
     }
   }
 });
 
-function placeImage(src, x, y) {
-  const wrapper = document.createElement('div');
-  wrapper.className = 'pasted-image';
-  wrapper.style.left = x + 'px';
-  wrapper.style.top  = y + 'px';
-
-  const img = document.createElement('img');
-  img.src = src;
-  img.draggable = false;
-
-  const removeBtn = document.createElement('button');
-  removeBtn.className = 'img-remove';
-  removeBtn.textContent = '✕';
-  removeBtn.title = 'Hapus gambar';
-  removeBtn.addEventListener('click', () => wrapper.remove());
-
-  wrapper.appendChild(img);
-  wrapper.appendChild(removeBtn);
-  imageLayer.appendChild(wrapper);
-
-  makeDraggable(wrapper);
+function placeImage(src,x,y){
+  var wrap=document.createElement('div');
+  wrap.className='pasted-image';
+  wrap.style.left=x+'px'; wrap.style.top=y+'px';
+  var img=document.createElement('img'); img.src=src; img.draggable=false;
+  wrap.appendChild(img);
+  imageLayer.appendChild(wrap);
+  makeDraggable(wrap);
 }
 
-function makeDraggable(el) {
-  let ox = 0, oy = 0, mx = 0, my = 0;
-
-  function dragStart(e) {
-    if (e.target.classList.contains('img-remove')) return;
+function makeDraggable(el){
+  var mx,my;
+  function start(e){
     e.preventDefault();
-    mx = e.clientX || e.touches[0].clientX;
-    my = e.clientY || e.touches[0].clientY;
-    document.addEventListener('mousemove', drag);
-    document.addEventListener('mouseup', dragEnd);
-    document.addEventListener('touchmove', drag, { passive: false });
-    document.addEventListener('touchend', dragEnd);
+    mx=e.clientX||(e.touches&&e.touches[0].clientX)||0;
+    my=e.clientY||(e.touches&&e.touches[0].clientY)||0;
+    document.addEventListener('mousemove',move);
+    document.addEventListener('mouseup',  stop);
+    document.addEventListener('touchmove',move,{passive:false});
+    document.addEventListener('touchend', stop);
   }
-
-  function drag(e) {
+  function move(e){
     e.preventDefault();
-    const cx = e.clientX || e.touches[0].clientX;
-    const cy = e.clientY || e.touches[0].clientY;
-    ox = mx - cx; oy = my - cy;
-    mx = cx; my = cy;
-    el.style.left = (el.offsetLeft - ox) + 'px';
-    el.style.top  = (el.offsetTop  - oy) + 'px';
+    var cx=e.clientX||(e.touches&&e.touches[0].clientX)||mx;
+    var cy=e.clientY||(e.touches&&e.touches[0].clientY)||my;
+    el.style.left=(el.offsetLeft+cx-mx)+'px';
+    el.style.top =(el.offsetTop +cy-my)+'px';
+    mx=cx; my=cy;
   }
-
-  function dragEnd() {
-    document.removeEventListener('mousemove', drag);
-    document.removeEventListener('mouseup', dragEnd);
-    document.removeEventListener('touchmove', drag);
-    document.removeEventListener('touchend', dragEnd);
-  }
-
-  el.addEventListener('mousedown',  dragStart);
-  el.addEventListener('touchstart', dragStart, { passive: false });
+  function stop(){ document.removeEventListener('mousemove',move); document.removeEventListener('mouseup',stop); document.removeEventListener('touchmove',move); document.removeEventListener('touchend',stop); }
+  el.addEventListener('mousedown', start);
+  el.addEventListener('touchstart',start,{passive:false});
 }
 
-// ─── Page Management ─────────────────────────────────────
-btnAddPage.addEventListener('click', () => {
+// ── Page buttons ──
+btnAddPage.addEventListener('click', function(){
+  savePage(); pages.push(createPage()); currentPage=pages.length-1;
+  loadPage(currentPage); renderPageList();
+  showToast('Halaman '+pages.length+' ditambahkan ✓'); closeIfMobile();
+});
+btnPrevPage.addEventListener('click',   function(){ if(currentPage>0) switchPage(currentPage-1); });
+btnNextPage.addEventListener('click',   function(){ if(currentPage<pages.length-1) switchPage(currentPage+1); });
+btnDeletePage.addEventListener('click', function(){
+  if(pages.length<=1){ showToast('Tidak bisa menghapus halaman terakhir!'); return; }
+  if(!confirm('Hapus halaman ini?')) return;
+  pages.splice(currentPage,1); currentPage=Math.min(currentPage,pages.length-1);
+  loadPage(currentPage); renderPageList(); showToast('Halaman dihapus');
+});
+
+// ── Auto expand text ──
+mainTextBlock.addEventListener('input', function(){
+  var h=mainTextBlock.scrollHeight+80;
+  if(h>1000) notebookPage.style.minHeight=h+'px';
+  scheduleAutoSave();
+});
+
+// ── Auto Save localStorage ──
+function scheduleAutoSave(){ clearTimeout(autoTimer); autoTimer=setTimeout(doAutoSave,1500); }
+function doAutoSave(){
   savePage();
-  state.pages.push(createPage());
-  state.currentPage = state.pages.length - 1;
-  loadPage(state.currentPage);
-  renderPageList();
-  showToast(`Halaman ${state.pages.length} ditambahkan ✓`);
-});
+  try{ localStorage.setItem('btp_data', JSON.stringify({pages:pages,currentPage:currentPage})); showToast('Tersimpan otomatis ✓'); }catch(e){}
+}
+function loadStorage(){
+  try{
+    var d=JSON.parse(localStorage.getItem('btp_data'));
+    if(d&&d.pages&&d.pages.length){ pages=d.pages; currentPage=d.currentPage||0; return true; }
+  }catch(e){}
+  return false;
+}
 
-btnPrevPage.addEventListener('click', () => {
-  if (state.currentPage > 0) switchPage(state.currentPage - 1);
-});
-
-btnNextPage.addEventListener('click', () => {
-  if (state.currentPage < state.pages.length - 1) switchPage(state.currentPage + 1);
-});
-
-btnDeletePage.addEventListener('click', () => {
-  if (state.pages.length <= 1) { showToast('Tidak bisa menghapus halaman terakhir!'); return; }
-  if (!confirm(`Hapus Halaman ${state.currentPage + 1}?`)) return;
-  state.pages.splice(state.currentPage, 1);
-  state.currentPage = Math.min(state.currentPage, state.pages.length - 1);
-  loadPage(state.currentPage);
-  renderPageList();
-  showToast('Halaman dihapus');
-});
-
-// ─── Export ──────────────────────────────────────────────
-btnExportPNG.addEventListener('click', () => {
+// ── Save TXT ──
+btnSaveTxt.addEventListener('click', function(){
   savePage();
-  exportCurrentPage();
-});
-
-function exportCurrentPage() {
-  const rect = notebookPage.getBoundingClientRect();
-  const w = Math.round(rect.width);
-  const h = notebookPage.scrollHeight || Math.round(rect.height);
-
-  const offCanvas = document.createElement('canvas');
-  offCanvas.width  = w;
-  offCanvas.height = h;
-  const offCtx = offCanvas.getContext('2d');
-
-  // White background
-  offCtx.fillStyle = '#fdfaf3';
-  offCtx.fillRect(0, 0, w, h);
-
-  // Draw lines
-  offCtx.strokeStyle = '#e8e0cc';
-  offCtx.lineWidth = 1;
-  for (let y = 40 + 32; y < h; y += 32) {
-    offCtx.beginPath();
-    offCtx.moveTo(0, y);
-    offCtx.lineTo(w, y);
-    offCtx.stroke();
+  var nama=prompt('Nama file:','catatan')||'catatan';
+  var isi='';
+  for(var i=0;i<pages.length;i++){
+    isi+='=== Halaman '+(i+1)+(pages[i].title?' : '+pages[i].title:'')+' ===\n';
+    isi+=(pages[i].textContent||'').replace(/<[^>]+>/g,'')+'\n\n';
   }
+  var a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([isi],{type:'text/plain'}));
+  a.download=nama+'.txt'; a.click();
+  showToast('TXT tersimpan ✓');
+});
 
-  // Margin line
-  offCtx.strokeStyle = 'rgba(220,100,100,0.35)';
-  offCtx.lineWidth = 1.5;
-  offCtx.beginPath();
-  offCtx.moveTo(72, 0);
-  offCtx.lineTo(72, h);
-  offCtx.stroke();
-
-  // Draw canvas layer
-  offCtx.drawImage(drawCanvas, 0, 0);
-
-  // Text (via foreignObject in SVG)
-  const svgData = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">
-    <foreignObject width="100%" height="100%">
-      <div xmlns="http://www.w3.org/1999/xhtml" style="
-        font-family: 'Caveat', cursive;
-        font-size: 20px;
-        line-height: 32px;
-        color: #1a1a2e;
-        position: absolute;
-        top: 48px;
-        left: 84px;
-        right: 30px;
-        white-space: pre-wrap;
-        word-break: break-word;
-      ">${mainTextBlock.innerHTML}</div>
-    </foreignObject>
-  </svg>`;
-
-  const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
-  const svgUrl  = URL.createObjectURL(svgBlob);
-  const svgImg  = new Image();
-
-  svgImg.onload = () => {
-    offCtx.drawImage(svgImg, 0, 0);
-    URL.revokeObjectURL(svgUrl);
-
-    // Images
-    const imgEls = imageLayer.querySelectorAll('.pasted-image');
-    let pending = imgEls.length;
-
-    function finalExport() {
-      const link = document.createElement('a');
-      link.download = `halaman-${state.currentPage + 1}.png`;
-      link.href = offCanvas.toDataURL('image/png');
-      link.click();
-      showToast('PNG tersimpan ✓');
+// ── Load TXT ──
+btnLoadTxt.addEventListener('click', function(){ txtInput.click(); });
+txtInput.addEventListener('change', function(e){
+  var file=e.target.files[0]; if(!file) return;
+  var r=new FileReader();
+  r.onload=function(ev){
+    pages=[]; var blocks=ev.target.result.split(/===.+===/);
+    for(var i=0;i<blocks.length;i++){
+      if(blocks[i].trim()){ var pg=createPage(); pg.textContent=blocks[i].trim().replace(/\n/g,'<br>'); pages.push(pg); }
     }
-
-    if (!pending) { finalExport(); return; }
-    imgEls.forEach(wrapper => {
-      const img = wrapper.querySelector('img');
-      const x   = parseInt(wrapper.style.left) || 0;
-      const y   = parseInt(wrapper.style.top)  || 0;
-      const pImg = new Image();
-      pImg.crossOrigin = 'anonymous';
-      pImg.onload = () => {
-        offCtx.drawImage(pImg, x, y, pImg.naturalWidth > 300 ? 300 : pImg.naturalWidth, pImg.naturalHeight > 300 ? 300 : pImg.naturalHeight);
-        pending--;
-        if (!pending) finalExport();
-      };
-      pImg.onerror = () => { pending--; if (!pending) finalExport(); };
-      pImg.src = img.src;
-    });
+    if(!pages.length){ var pg=createPage(); pg.textContent=ev.target.result.replace(/\n/g,'<br>'); pages.push(pg); }
+    currentPage=0; loadPage(0); renderPageList(); showToast('TXT dimuat ✓');
   };
-  svgImg.src = svgUrl;
-}
-
-btnExportPDF.addEventListener('click', () => {
-  showToast('Untuk PDF, gunakan Print > Save as PDF di browser Anda');
-  setTimeout(() => window.print(), 500);
+  r.readAsText(file); e.target.value='';
 });
 
-// ─── Hamburger ───────────────────────────────────────────
-hamburger.addEventListener('click', () => {
-  sidebar.classList.toggle('visible');
-  main.classList.toggle('full');
+// ── Export PNG ──
+btnExportPNG.addEventListener('click', function(){
+  savePage();
+  var a=document.createElement('a');
+  a.download=(pages[currentPage].title||'halaman-'+(currentPage+1))+'.png';
+  a.href=drawCanvas.toDataURL('image/png'); a.click();
+  showToast('PNG tersimpan ✓');
 });
 
-// ─── Toast ───────────────────────────────────────────────
-let toastTimer;
-function showToast(msg) {
-  toast.textContent = msg;
-  toast.classList.add('show');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => toast.classList.remove('show'), 2200);
-}
-
-// ─── Auto-expand page height ─────────────────────────────
-mainTextBlock.addEventListener('input', () => {
-  const minH = 900;
-  const scrollH = mainTextBlock.scrollHeight + 80;
-  if (scrollH > minH) {
-    notebookPage.style.minHeight = scrollH + 'px';
-  }
-});
-
-// ─── Init ────────────────────────────────────────────────
-function init() {
-  state.pages.push(createPage());
-  resizeCanvas();
-  loadPage(0);
-  renderPageList();
-  setTool('text');
-
-  // Keyboard shortcut hints
-  document.addEventListener('keydown', e => {
-    if (e.ctrlKey || e.metaKey) {
-      switch (e.key) {
-        case 'd': e.preventDefault(); setTool('draw'); break;
-        case 't': e.preventDefault(); setTool('text'); break;
-        case 'e': e.preventDefault(); setTool('erase'); break;
+// ── Export PDF ──
+btnExportPDF.addEventListener('click', function(){
+  savePage(); closeIfMobile(); showToast('Membuat PDF...');
+  setTimeout(function(){
+    try{
+      var J=window.jspdf&&window.jspdf.jsPDF;
+      if(!J){ showToast('Library PDF belum siap'); return; }
+      var pdf=new J({orientation:'portrait',unit:'mm',format:'a4'});
+      var W=210, H=297, M=15;
+      for(var i=0;i<pages.length;i++){
+        if(i>0) pdf.addPage();
+        var p=pages[i];
+        // Background
+        pdf.setFillColor(255,253,246); pdf.rect(0,0,W,H,'F');
+        // Garis
+        pdf.setDrawColor(210,200,185); pdf.setLineWidth(0.2);
+        for(var y=25;y<H;y+=8) pdf.line(0,y,W,y);
+        // Margin merah
+        pdf.setDrawColor(255,160,160); pdf.setLineWidth(0.4); pdf.line(20,0,20,H);
+        // Judul
+        if(p.title){ pdf.setFont('helvetica','bold'); pdf.setFontSize(14); pdf.setTextColor(20,20,50); pdf.text(p.title,M+8,12); }
+        // Nomor halaman
+        pdf.setFont('helvetica','normal'); pdf.setFontSize(9); pdf.setTextColor(160,160,160);
+        pdf.text('Halaman '+(i+1)+' / '+pages.length, W-M-22, H-6);
+        // Teks
+        var teks=(p.textContent||'').replace(/<br\s*\/?>/gi,'\n').replace(/<[^>]+>/g,'').trim();
+        if(teks){ pdf.setFont('helvetica','normal'); pdf.setFontSize(11); pdf.setTextColor(20,20,40); pdf.text(pdf.splitTextToSize(teks,W-M*2-8),M+8,p.title?22:18); }
+        // Canvas drawing layer
+        if(p.canvasData&&p.canvasData!=='data:,'){
+          try{ pdf.addImage(p.canvasData,'PNG',0,0,W,H,'','NONE'); }catch(e2){}
+        }
       }
-    }
-  });
+      var nama=prompt('Nama file PDF:','buku-tulis')||'buku-tulis';
+      pdf.save(nama+'.pdf');
+      showToast('PDF berhasil disimpan ✓');
+    }catch(err){ showToast('Error PDF: '+err.message); }
+  }, 400);
+});
 
-  window.addEventListener('resize', () => {
-    resizeCanvas();
-    const p = state.pages[state.currentPage];
-    if (p && p.canvasData) {
-      const img = new Image();
-      img.onload = () => ctx.drawImage(img, 0, 0);
-      img.src = p.canvasData;
-    }
-  });
+// ── History ──
+btnHistory.addEventListener('click', function(){
+  closeIfMobile();
+  var msg='RIWAYAT HALAMAN\n\n';
+  for(var i=0;i<pages.length;i++){
+    msg+='• Halaman '+(i+1)+(pages[i].title?' : '+pages[i].title:'')+'\n';
+    msg+='  Dibuat: '+(pages[i].created||'-')+'\n\n';
+  }
+  alert(msg);
+});
+
+// ── Info ──
+btnInfo.addEventListener('click', function(){
+  closeIfMobile(); savePage();
+  var total=0;
+  for(var i=0;i<pages.length;i++) total+=(pages[i].textContent||'').replace(/<[^>]+>/g,'').length;
+  alert('INFO FILE\n\nJumlah Halaman : '+pages.length+'\nTotal Karakter : '+total+'\nFont Aktif     : '+currentFont.split(',')[0].replace(/'/g,'')+'\nHalaman Aktif  : '+(currentPage+1)+'\nDibuat         : '+(pages[0]&&pages[0].created||'-'));
+});
+
+// ── Toast ──
+var toastTimer;
+function showToast(msg){
+  toast.textContent=msg; toast.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(function(){ toast.classList.remove('show'); },2200);
 }
 
+// ── Resize ──
+window.addEventListener('resize', resizeCanvas);
+
+// ── INIT ──
+function init(){
+  if(!loadStorage()) pages.push(createPage());
+  resizeCanvas(); loadPage(currentPage); renderPageList(); setTool('text');
+}
 init();
