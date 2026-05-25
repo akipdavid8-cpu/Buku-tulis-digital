@@ -1,32 +1,61 @@
-const editor = document.getElementById('editor');
-const canvas = document.getElementById('canvas');
-const ctx = canvas.getContext('2d');
-const paper = document.getElementById('paper');
+const state = {
+  tool:'text',
+  penColor:'#1a1a2e',
+  penSize:3
+};
+
+/* ELEMENT */
+
+const sidebar = document.getElementById('sidebar');
+const hamburger = document.getElementById('hamburger');
+
+const toolText = document.getElementById('toolText');
+const toolDraw = document.getElementById('toolDraw');
+const toolErase = document.getElementById('toolErase');
+const toolImage = document.getElementById('toolImage');
+
+const drawCanvas = document.getElementById('drawCanvas');
+const ctx = drawCanvas.getContext('2d');
+
+const notebookPage = document.getElementById('notebookPage');
+
+const mainTextBlock = document.getElementById('mainTextBlock');
+
+const penColor = document.getElementById('penColor');
+const penSize = document.getElementById('penSize');
+const penSizeLabel = document.getElementById('penSizeLabel');
+
 const toast = document.getElementById('toast');
-const fontSelect = document.getElementById('fontSelect');
-const fontColor = document.getElementById('fontColor');
-const fontSize = document.getElementById('fontSize');
-const fontSizeLabel = document.getElementById('fontSizeLabel');
+
 const imageInput = document.getElementById('imageInput');
 const imageLayer = document.getElementById('imageLayer');
-const pageList = document.getElementById('pageList');
-const pageTitle = document.getElementById('pageTitle');
 
-let tool = 'text';
-let drawing = false;
-let pages = [];
-let currentPage = 0;
+const btnSaveTxt = document.getElementById('btnSaveTxt');
+const btnLoadTxt = document.getElementById('btnLoadTxt');
+const txtInput = document.getElementById('txtInput');
+
+const btnHistory = document.getElementById('btnHistory');
+const btnInfo = document.getElementById('btnInfo');
+
+const pageTitleInput = document.getElementById('pageTitleInput');
+
+const fontStyleSelect = document.getElementById('fontStyleSelect');
+
+/* RESIZE */
 
 function resizeCanvas(){
-  canvas.width = paper.offsetWidth;
-  canvas.height = paper.offsetHeight;
+  drawCanvas.width = notebookPage.offsetWidth;
+  drawCanvas.height = notebookPage.offsetHeight;
 }
 
 resizeCanvas();
+
 window.addEventListener('resize',resizeCanvas);
 
-function showToast(text){
-  toast.textContent = text;
+/* TOAST */
+
+function showToast(msg){
+  toast.textContent = msg;
   toast.classList.add('show');
 
   setTimeout(()=>{
@@ -34,267 +63,316 @@ function showToast(text){
   },2000);
 }
 
-// TOOL
-const toolBtns = document.querySelectorAll('.tool');
+/* SIDEBAR */
 
-toolBtns.forEach(btn=>{
-  btn.onclick=()=>{
-    toolBtns.forEach(b=>b.classList.remove('active'));
-    btn.classList.add('active');
+hamburger.onclick = ()=>{
+  sidebar.classList.toggle('show');
+};
 
-    tool = btn.dataset.tool;
+/* TOOL */
 
-    if(tool==='draw' || tool==='erase'){
-      canvas.classList.add('active');
-    }else{
-      canvas.classList.remove('active');
-    }
-  }
-});
+function setTool(name){
 
-// DRAW
-canvas.addEventListener('mousedown',start);
-canvas.addEventListener('mousemove',draw);
-window.addEventListener('mouseup',stop);
+  state.tool = name;
 
-canvas.addEventListener('touchstart',start);
-canvas.addEventListener('touchmove',draw);
-window.addEventListener('touchend',stop);
+  document.querySelectorAll('.tool-btn')
+  .forEach(btn=>btn.classList.remove('active'));
 
-function getPos(e){
-  const rect = canvas.getBoundingClientRect();
+  if(name==='text') toolText.classList.add('active');
+  if(name==='draw') toolDraw.classList.add('active');
+  if(name==='erase') toolErase.classList.add('active');
+  if(name==='image') toolImage.classList.add('active');
 
-  if(e.touches){
-    return {
-      x:e.touches[0].clientX-rect.left,
-      y:e.touches[0].clientY-rect.top
-    }
-  }
-
-  return {
-    x:e.clientX-rect.left,
-    y:e.clientY-rect.top
-  }
 }
 
-function start(e){
-  if(tool!=='draw' && tool!=='erase') return;
+toolText.onclick = ()=>setTool('text');
+toolDraw.onclick = ()=>setTool('draw');
+toolErase.onclick = ()=>setTool('erase');
 
-  drawing=true;
+toolImage.onclick = ()=>{
+
+  setTool('image');
+
+  imageInput.click();
+};
+
+/* FONT */
+
+fontStyleSelect.onchange = ()=>{
+
+  mainTextBlock.style.fontFamily =
+  fontStyleSelect.value;
+
+  showToast('Gaya tulisan diubah ✓');
+};
+
+/* PEN */
+
+penColor.oninput = ()=>{
+  state.penColor = penColor.value;
+};
+
+penSize.oninput = ()=>{
+  state.penSize = penSize.value;
+  penSizeLabel.textContent =
+  state.penSize + 'px';
+};
+
+/* DRAW */
+
+let drawing = false;
+
+function getPos(e){
+
+  const rect = drawCanvas.getBoundingClientRect();
+
+  const x =
+  (e.clientX || e.touches[0].clientX)
+  - rect.left;
+
+  const y =
+  (e.clientY || e.touches[0].clientY)
+  - rect.top;
+
+  return {x,y};
+}
+
+drawCanvas.addEventListener('mousedown',startDraw);
+drawCanvas.addEventListener('touchstart',startDraw);
+
+function startDraw(e){
+
+  if(state.tool!=='draw' &&
+     state.tool!=='erase') return;
+
+  drawing = true;
+
   const pos = getPos(e);
 
   ctx.beginPath();
   ctx.moveTo(pos.x,pos.y);
 }
 
+drawCanvas.addEventListener('mousemove',draw);
+drawCanvas.addEventListener('touchmove',draw);
+
 function draw(e){
+
   if(!drawing) return;
 
   const pos = getPos(e);
 
-  ctx.lineWidth = 3;
+  ctx.lineWidth = state.penSize;
   ctx.lineCap = 'round';
 
-  if(tool==='erase'){
-    ctx.globalCompositeOperation='destination-out';
+  if(state.tool==='erase'){
+    ctx.globalCompositeOperation =
+    'destination-out';
   }else{
-    ctx.globalCompositeOperation='source-over';
-    ctx.strokeStyle=fontColor.value;
+    ctx.globalCompositeOperation =
+    'source-over';
+
+    ctx.strokeStyle =
+    state.penColor;
   }
 
   ctx.lineTo(pos.x,pos.y);
   ctx.stroke();
 }
 
-function stop(){
-  drawing=false;
-}
+window.addEventListener('mouseup',()=>{
+  drawing = false;
+});
 
-// FONT
-fontSelect.onchange=()=>{
-  editor.style.fontFamily = fontSelect.value;
-}
+window.addEventListener('touchend',()=>{
+  drawing = false;
+});
 
-fontColor.oninput=()=>{
-  editor.style.color = fontColor.value;
-}
+/* IMAGE */
 
-fontSize.oninput=()=>{
-  editor.style.fontSize = fontSize.value+'px';
-  fontSizeLabel.textContent = fontSize.value+'px';
-}
+imageInput.addEventListener('change',e=>{
 
-// THEME
-const themeBtn = document.getElementById('themeBtn');
-
-themeBtn.onclick=()=>{
-  document.body.classList.toggle('dark');
-
-  if(document.body.classList.contains('dark')){
-    themeBtn.textContent='☀️ Light Mode';
-  }else{
-    themeBtn.textContent='🌙 Dark Mode';
-  }
-}
-
-// IMAGE
-const addImageBtn = document.getElementById('addImageBtn');
-
-addImageBtn.onclick=()=>{
-  imageInput.click();
-}
-
-imageInput.onchange=(e)=>{
   const file = e.target.files[0];
+
   if(!file) return;
 
   const reader = new FileReader();
 
-  reader.onload=(ev)=>{
-    const div = document.createElement('div');
-    div.className='pasted-image';
-    div.style.left='120px';
-    div.style.top='120px';
+  reader.onload = ev=>{
 
-    div.innerHTML=`<img src="${ev.target.result}">`;
+    addImage(ev.target.result);
 
-    imageLayer.appendChild(div);
-
-    dragElement(div);
-
-    showToast('Gambar ditambahkan');
-  }
+    showToast('Gambar berhasil ditambahkan ✓');
+  };
 
   reader.readAsDataURL(file);
+});
+
+function addImage(src){
+
+  const wrap = document.createElement('div');
+
+  wrap.className = 'pasted-image';
+
+  wrap.style.left = '100px';
+  wrap.style.top = '120px';
+
+  wrap.innerHTML =
+  `<img src="${src}">`;
+
+  imageLayer.appendChild(wrap);
+
+  dragElement(wrap);
 }
 
+/* DRAG IMAGE */
+
 function dragElement(el){
+
   let x=0,y=0;
 
-  el.onmousedown=dragMouseDown;
+  el.onmousedown = dragMouseDown;
+  el.ontouchstart = dragMouseDown;
 
   function dragMouseDown(e){
+
     e.preventDefault();
 
-    document.onmousemove=elementDrag;
-    document.onmouseup=closeDrag;
+    const clientX =
+    e.clientX || e.touches[0].clientX;
 
-    x=e.clientX;
-    y=e.clientY;
+    const clientY =
+    e.clientY || e.touches[0].clientY;
+
+    x = clientX;
+    y = clientY;
+
+    document.onmousemove = elementDrag;
+    document.onmouseup = stopDrag;
+
+    document.ontouchmove = elementDrag;
+    document.ontouchend = stopDrag;
   }
 
   function elementDrag(e){
+
     e.preventDefault();
 
-    let dx=x-e.clientX;
-    let dy=y-e.clientY;
+    const clientX =
+    e.clientX || e.touches[0].clientX;
 
-    x=e.clientX;
-    y=e.clientY;
+    const clientY =
+    e.clientY || e.touches[0].clientY;
 
-    el.style.top=(el.offsetTop-dy)+'px';
-    el.style.left=(el.offsetLeft-dx)+'px';
+    el.style.top =
+    (el.offsetTop + clientY - y) + "px";
+
+    el.style.left =
+    (el.offsetLeft + clientX - x) + "px";
+
+    x = clientX;
+    y = clientY;
   }
 
-  function closeDrag(){
-    document.onmouseup=null;
-    document.onmousemove=null;
+  function stopDrag(){
+
+    document.onmouseup = null;
+    document.onmousemove = null;
+
+    document.ontouchmove = null;
+    document.ontouchend = null;
   }
 }
 
-// TXT SAVE
-const saveTxt = document.getElementById('saveTxt');
+/* SAVE TXT */
 
-saveTxt.onclick=()=>{
-  const text = pageTitle.value + '\n\n' + editor.innerText;
+btnSaveTxt.onclick = ()=>{
 
-  const blob = new Blob([text],{type:'text/plain'});
+  const blob = new Blob(
+    [mainTextBlock.innerText],
+    {type:'text/plain'}
+  );
 
   const a = document.createElement('a');
+
   a.href = URL.createObjectURL(blob);
-  a.download = 'catatan.txt';
+
+  a.download =
+  (pageTitleInput.value || 'catatan')
+  + '.txt';
+
   a.click();
 
-  showToast('TXT disimpan');
-}
+  showToast('TXT berhasil disimpan ✓');
+};
 
-// PNG SAVE
-const savePng = document.getElementById('savePng');
+/* LOAD TXT */
 
-savePng.onclick=()=>{
-  showToast('Gunakan screenshot untuk PNG');
-}
+btnLoadTxt.onclick = ()=>{
+  txtInput.click();
+};
 
-// INFO
-const infoBtn = document.getElementById('infoBtn');
+txtInput.addEventListener('change',e=>{
 
-infoBtn.onclick=()=>{
-  alert('Buku Tulis Ultra Pro\n\nFitur:\n- Multi halaman\n- Drawing\n- Dark mode\n- Gaya tulisan\n- Simpan TXT\n- Tempel gambar');
-}
+  const file = e.target.files[0];
 
-// PAGE SYSTEM
-function createPage(title='Halaman Baru'){
-  return {
-    title,
-    content:''
-  }
-}
+  if(!file) return;
 
-function renderPages(){
-  pageList.innerHTML='';
+  const reader = new FileReader();
 
-  pages.forEach((p,i)=>{
-    const div=document.createElement('div');
-    div.className='pageItem';
+  reader.onload = ev=>{
 
-    if(i===currentPage){
-      div.classList.add('active');
-    }
+    mainTextBlock.innerText =
+    ev.target.result;
 
-    div.textContent=p.title;
+    showToast('TXT berhasil dimuat ✓');
+  };
 
-    div.onclick=()=>{
-      saveCurrentPage();
-      currentPage=i;
-      loadPage();
-    }
+  reader.readAsText(file);
+});
 
-    pageList.appendChild(div);
-  })
-}
+/* HISTORY */
 
-function saveCurrentPage(){
-  pages[currentPage].title=pageTitle.value;
-  pages[currentPage].content=editor.innerHTML;
-}
+btnHistory.onclick = ()=>{
 
-function loadPage(){
-  pageTitle.value=pages[currentPage].title;
-  editor.innerHTML=pages[currentPage].content;
-  renderPages();
-}
+  const note =
+  mainTextBlock.innerText;
 
-document.getElementById('addPage').onclick=()=>{
-  saveCurrentPage();
+  localStorage.setItem(
+    'history_note',
+    note
+  );
 
-  pages.push(createPage('Halaman '+(pages.length+1)));
+  showToast('Riwayat disimpan ✓');
+};
 
-  currentPage=pages.length-1;
+/* INFO */
 
-  loadPage();
+btnInfo.onclick = ()=>{
 
-  showToast('Halaman baru dibuat');
-}
+  alert(
+`BUKU TULIS DIGITAL PRO
 
-// MENU MOBILE
-const menuBtn=document.getElementById('menuBtn');
-const sidebar=document.getElementById('sidebar');
+Fitur:
+✓ 30 gaya tulisan
+✓ Upload gambar
+✓ Simpan TXT
+✓ Upload TXT
+✓ Gambar bebas
+✓ Penghapus
+✓ Riwayat catatan
+✓ Mobile friendly
 
-menuBtn.onclick=()=>{
-  sidebar.classList.toggle('show');
-}
+Versi: PRO`
+  );
+};
 
-// INIT
-pages.push(createPage('Halaman 1'));
-loadPage();
-showToast('Buku Tulis Ultra siap');
+/* TITLE */
+
+pageTitleInput.oninput = ()=>{
+
+  document.getElementById(
+    'currentPageLabel'
+  ).textContent =
+  pageTitleInput.value || 'Tanpa Judul';
+};
