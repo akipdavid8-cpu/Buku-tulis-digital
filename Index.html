@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Buku Tulis Digital</title>
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-header">
+    <div class="app-logo">📓</div>
+    <h1 class="app-title">Buku Tulis</h1>
+  </div>
+
+  <div class="sidebar-section">
+    <span class="section-label">Halaman</span>
+    <div class="page-list" id="pageList"></div>
+    <button class="btn-add-page" id="btnAddPage">+ Tambah Halaman</button>
+  </div>
+
+  <div class="sidebar-section">
+    <span class="section-label">Alat</span>
+    <div class="tool-group">
+      <button class="tool-btn active" id="toolText" title="Teks">✏️ Tulis</button>
+      <button class="tool-btn" id="toolDraw" title="Gambar bebas">🖊️ Gambar</button>
+      <button class="tool-btn" id="toolSign" title="Tanda Tangan">🖋️ T. Tangan</button>
+      <button class="tool-btn" id="toolImage" title="Tempel Gambar">🖼️ Gambar</button>
+      <button class="tool-btn" id="toolErase" title="Hapus">🧹 Hapus</button>
+    </div>
+  </div>
+
+  <div class="sidebar-section" id="drawOptions" style="display:none">
+    <span class="section-label">Warna & Ukuran</span>
+    <div class="color-row">
+      <input type="color" id="penColor" value="#1a1a2e" title="Warna pena"/>
+      <input type="range" id="penSize" min="1" max="20" value="3" title="Ukuran pena"/>
+      <span id="penSizeLabel">3px</span>
+    </div>
+  </div>
+
+  <div class="sidebar-section">
+    <span class="section-label">Ekspor</span>
+    <button class="btn-export" id="btnExportPNG">⬇️ Simpan PNG</button>
+    <button class="btn-export" id="btnExportPDF">📄 Simpan PDF</button>
+  </div>
+</aside>
+
+<!-- HAMBURGER -->
+<button class="hamburger" id="hamburger">☰</button>
+
+<!-- MAIN -->
+<main class="main" id="main">
+  <div class="notebook-wrapper">
+    <!-- Page Header -->
+    <div class="page-header">
+      <div class="page-info">
+        <span id="currentPageLabel">Halaman 1</span>
+      </div>
+      <div class="page-actions">
+        <button class="icon-btn" id="btnPrevPage" title="Halaman sebelumnya">‹</button>
+        <button class="icon-btn" id="btnNextPage" title="Halaman berikutnya">›</button>
+        <button class="icon-btn danger" id="btnDeletePage" title="Hapus halaman">🗑️</button>
+      </div>
+    </div>
+
+    <!-- Notebook Page -->
+    <div class="notebook-page" id="notebookPage">
+      <!-- Canvas for drawing/signature -->
+      <canvas id="drawCanvas"></canvas>
+      <!-- Textarea for writing -->
+      <div class="text-layer" id="textLayer">
+        <div class="text-block" id="mainTextBlock" contenteditable="true" spellcheck="false"
+          data-placeholder="Mulai menulis di sini..."></div>
+      </div>
+      <!-- Image layer -->
+      <div class="image-layer" id="imageLayer"></div>
+      <!-- Signature pad overlay -->
+      <div class="sign-overlay" id="signOverlay" style="display:none">
+        <div class="sign-modal">
+          <h3>Buat Tanda Tangan</h3>
+          <canvas id="signCanvas" width="500" height="200"></canvas>
+          <div class="sign-actions">
+            <button id="btnClearSign">Bersihkan</button>
+            <button id="btnSaveSign" class="primary">Simpan</button>
+            <button id="btnCancelSign">Batal</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Floating image input -->
+    <input type="file" id="imageInput" accept="image/*" style="display:none"/>
+  </div>
+</main>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
