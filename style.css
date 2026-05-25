@@ -1,470 +1,612 @@
 /* ===========================
-   BUKU TULIS DIGITAL - CSS
+   BUKU TULIS DIGITAL - JS
    =========================== */
 
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+// ─── State ───────────────────────────────────────────────
+const state = {
+  pages: [],          // Array of page data
+  currentPage: 0,     // Index
+  tool: 'text',       // text | draw | sign | image | erase
+  penColor: '#1a1a2e',
+  penSize: 3,
+  drawing: false,
+  lastX: 0,
+  lastY: 0,
+};
 
-:root {
-  --paper: #fdfaf3;
-  --paper-line: #e8e0cc;
-  --ink: #1a1a2e;
-  --sidebar-bg: #1a1a2e;
-  --sidebar-accent: #e8c547;
-  --sidebar-text: #f0ead8;
-  --sidebar-muted: #8a8aaa;
-  --btn-hover: #2e2e50;
-  --danger: #e05252;
-  --shadow: 0 8px 40px rgba(0,0,0,0.18);
-  --page-w: 700px;
-  --page-h: 900px;
-  --sidebar-w: 220px;
+// ─── DOM ─────────────────────────────────────────────────
+const pageList       = document.getElementById('pageList');
+const btnAddPage     = document.getElementById('btnAddPage');
+const btnPrevPage    = document.getElementById('btnPrevPage');
+const btnNextPage    = document.getElementById('btnNextPage');
+const btnDeletePage  = document.getElementById('btnDeletePage');
+const currentPageLbl = document.getElementById('currentPageLabel');
+
+const notebookPage  = document.getElementById('notebookPage');
+const drawCanvas    = document.getElementById('drawCanvas');
+const textLayer     = document.getElementById('textLayer');
+const mainTextBlock = document.getElementById('mainTextBlock');
+const imageLayer    = document.getElementById('imageLayer');
+const imageInput    = document.getElementById('imageInput');
+const signOverlay   = document.getElementById('signOverlay');
+const signCanvas    = document.getElementById('signCanvas');
+
+const toolText  = document.getElementById('toolText');
+const toolDraw  = document.getElementById('toolDraw');
+const toolSign  = document.getElementById('toolSign');
+const toolImage = document.getElementById('toolImage');
+const toolErase = document.getElementById('toolErase');
+
+const drawOptions = document.getElementById('drawOptions');
+const penColor    = document.getElementById('penColor');
+const penSize     = document.getElementById('penSize');
+const penSizeLabel= document.getElementById('penSizeLabel');
+
+const btnExportPNG = document.getElementById('btnExportPNG');
+const btnExportPDF = document.getElementById('btnExportPDF');
+const toast        = document.getElementById('toast');
+const hamburger    = document.getElementById('hamburger');
+const sidebar      = document.getElementById('sidebar');
+const main         = document.getElementById('main');
+
+// Signature
+const btnClearSign  = document.getElementById('btnClearSign');
+const btnSaveSign   = document.getElementById('btnSaveSign');
+const btnCancelSign = document.getElementById('btnCancelSign');
+
+// ─── Canvas ctx ──────────────────────────────────────────
+const ctx = drawCanvas.getContext('2d');
+const sctx = signCanvas.getContext('2d');
+
+// ─── Page Data ───────────────────────────────────────────
+function createPage() {
+  return {
+    canvasData: null,   // ImageData URL
+    textContent: '',    // HTML content
+    images: [],         // [{src, x, y}]
+  };
 }
 
-body {
-  font-family: 'DM Sans', sans-serif;
-  background: #f0ead8;
-  min-height: 100vh;
-  display: flex;
-  overflow-x: hidden;
+function savePage() {
+  const p = state.pages[state.currentPage];
+  if (!p) return;
+  p.canvasData   = drawCanvas.toDataURL();
+  p.textContent  = mainTextBlock.innerHTML;
+  p.images       = [];
+  imageLayer.querySelectorAll('.pasted-image').forEach(el => {
+    p.images.push({
+      src: el.querySelector('img').src,
+      x: parseInt(el.style.left) || 50,
+      y: parseInt(el.style.top)  || 50,
+      w: el.offsetWidth,
+      h: el.offsetHeight,
+    });
+  });
 }
 
-/* ========= SIDEBAR ========= */
-.sidebar {
-  width: var(--sidebar-w);
-  min-height: 100vh;
-  background: var(--sidebar-bg);
-  color: var(--sidebar-text);
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  position: fixed;
-  left: 0; top: 0; bottom: 0;
-  z-index: 100;
-  transition: transform 0.3s ease;
-  overflow-y: auto;
-  padding-bottom: 24px;
+function loadPage(index) {
+  const p = state.pages[index];
+  if (!p) return;
+
+  // Resize canvas
+  resizeCanvas();
+
+  // Clear canvas
+  ctx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+
+  // Restore canvas drawing
+  if (p.canvasData) {
+    const img = new Image();
+    img.onload = () => ctx.drawImage(img, 0, 0);
+    img.src = p.canvasData;
+  }
+
+  // Restore text
+  mainTextBlock.innerHTML = p.textContent || '';
+
+  // Restore images
+  imageLayer.innerHTML = '';
+  (p.images || []).forEach(imgData => {
+    placeImage(imgData.src, imgData.x, imgData.y);
+  });
+
+  currentPageLbl.textContent = `Halaman ${index + 1}`;
 }
 
-.sidebar.hidden { transform: translateX(-100%); }
-
-.sidebar-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 24px 18px 18px;
-  border-bottom: 1px solid #2e2e50;
+function renderPageList() {
+  pageList.innerHTML = '';
+  state.pages.forEach((_, i) => {
+    const item = document.createElement('div');
+    item.className = 'page-item' + (i === state.currentPage ? ' active' : '');
+    item.textContent = `📄 Halaman ${i + 1}`;
+    item.addEventListener('click', () => switchPage(i));
+    pageList.appendChild(item);
+  });
 }
 
-.app-logo { font-size: 28px; }
-.app-title {
-  font-family: 'Caveat', cursive;
-  font-size: 22px;
-  color: var(--sidebar-accent);
-  font-weight: 700;
+function switchPage(index) {
+  savePage();
+  state.currentPage = index;
+  loadPage(index);
+  renderPageList();
 }
 
-.sidebar-section {
-  padding: 14px 16px 8px;
-  border-bottom: 1px solid #2a2a44;
+// ─── Canvas Resize ───────────────────────────────────────
+function resizeCanvas() {
+  const rect = notebookPage.getBoundingClientRect();
+  const w = Math.round(rect.width);
+  const h = Math.max(Math.round(rect.height), 900);
+  if (drawCanvas.width !== w || drawCanvas.height !== h) {
+    // Preserve drawing
+    const tmp = drawCanvas.toDataURL();
+    drawCanvas.width  = w;
+    drawCanvas.height = h;
+    if (tmp && tmp !== 'data:,') {
+      const img = new Image();
+      img.onload = () => ctx.drawImage(img, 0, 0);
+      img.src = tmp;
+    }
+  }
 }
 
-.section-label {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 1.5px;
-  color: var(--sidebar-muted);
-  display: block;
-  margin-bottom: 8px;
+// ─── Tool switching ──────────────────────────────────────
+const toolBtns = [toolText, toolDraw, toolSign, toolImage, toolErase];
+
+function setTool(name) {
+  state.tool = name;
+  toolBtns.forEach(b => b.classList.remove('active'));
+  drawCanvas.classList.remove('active', 'eraser');
+  textLayer.classList.remove('active');
+  imageLayer.classList.remove('active');
+  drawOptions.style.display = 'none';
+
+  switch (name) {
+    case 'text':
+      toolText.classList.add('active');
+      textLayer.classList.add('active');
+      mainTextBlock.focus();
+      break;
+    case 'draw':
+      toolDraw.classList.add('active');
+      drawCanvas.classList.add('active');
+      drawOptions.style.display = 'block';
+      break;
+    case 'erase':
+      toolErase.classList.add('active');
+      drawCanvas.classList.add('active', 'eraser');
+      drawOptions.style.display = 'block';
+      break;
+    case 'sign':
+      toolSign.classList.add('active');
+      openSignPad();
+      break;
+    case 'image':
+      toolImage.classList.add('active');
+      imageLayer.classList.add('active');
+      imageInput.click();
+      break;
+  }
 }
 
-/* Page list */
-.page-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  max-height: 200px;
-  overflow-y: auto;
-  margin-bottom: 10px;
+toolText.addEventListener('click',  () => setTool('text'));
+toolDraw.addEventListener('click',  () => setTool('draw'));
+toolSign.addEventListener('click',  () => setTool('sign'));
+toolImage.addEventListener('click', () => setTool('image'));
+toolErase.addEventListener('click', () => setTool('erase'));
+
+// ─── Drawing ─────────────────────────────────────────────
+function getPos(e) {
+  const rect = drawCanvas.getBoundingClientRect();
+  const scaleX = drawCanvas.width  / rect.width;
+  const scaleY = drawCanvas.height / rect.height;
+  let clientX, clientY;
+  if (e.touches) {
+    clientX = e.touches[0].clientX;
+    clientY = e.touches[0].clientY;
+  } else {
+    clientX = e.clientX;
+    clientY = e.clientY;
+  }
+  return {
+    x: (clientX - rect.left) * scaleX,
+    y: (clientY - rect.top)  * scaleY,
+  };
 }
 
-.page-item {
-  padding: 7px 10px;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 13px;
-  color: var(--sidebar-text);
-  transition: background 0.15s;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.page-item:hover { background: var(--btn-hover); }
-.page-item.active {
-  background: var(--sidebar-accent);
-  color: var(--ink);
-  font-weight: 600;
-}
-
-.btn-add-page {
-  width: 100%;
-  padding: 8px;
-  border: 1.5px dashed var(--sidebar-accent);
-  background: transparent;
-  color: var(--sidebar-accent);
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 13px;
-  transition: background 0.15s;
-  font-family: 'DM Sans', sans-serif;
-}
-.btn-add-page:hover { background: rgba(232,197,71,0.1); }
-
-/* Tool buttons */
-.tool-group {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+function startDraw(e) {
+  if (!['draw','erase'].includes(state.tool)) return;
+  e.preventDefault();
+  state.drawing = true;
+  const {x, y} = getPos(e);
+  state.lastX = x;
+  state.lastY = y;
+  ctx.beginPath();
+  ctx.arc(x, y, state.penSize / 2, 0, Math.PI * 2);
+  if (state.tool === 'erase') {
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.fillStyle = 'rgba(0,0,0,1)';
+  } else {
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = state.penColor;
+  }
+  ctx.fill();
 }
 
-.tool-btn {
-  padding: 9px 12px;
-  border: none;
-  background: transparent;
-  color: var(--sidebar-text);
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 13px;
-  text-align: left;
-  transition: background 0.15s, color 0.15s;
-  font-family: 'DM Sans', sans-serif;
-}
-.tool-btn:hover { background: var(--btn-hover); }
-.tool-btn.active {
-  background: var(--sidebar-accent);
-  color: var(--ink);
-  font-weight: 600;
-}
-
-/* Color row */
-.color-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 4px;
-}
-.color-row input[type=color] {
-  width: 32px; height: 32px;
-  border: none; border-radius: 50%;
-  cursor: pointer; background: none;
-  padding: 0;
-}
-.color-row input[type=range] { flex: 1; accent-color: var(--sidebar-accent); }
-#penSizeLabel { font-size: 12px; color: var(--sidebar-muted); min-width: 28px; }
-
-/* Export buttons */
-.btn-export {
-  width: 100%;
-  padding: 9px 12px;
-  margin-bottom: 6px;
-  border: 1px solid #3a3a5a;
-  background: transparent;
-  color: var(--sidebar-text);
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 13px;
-  text-align: left;
-  transition: background 0.15s;
-  font-family: 'DM Sans', sans-serif;
-}
-.btn-export:hover { background: var(--btn-hover); }
-
-/* ========= HAMBURGER ========= */
-.hamburger {
-  position: fixed;
-  top: 14px; left: 14px;
-  z-index: 200;
-  background: var(--sidebar-bg);
-  color: var(--sidebar-accent);
-  border: none;
-  border-radius: 8px;
-  width: 38px; height: 38px;
-  font-size: 18px;
-  cursor: pointer;
-  display: none;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+function moveDraw(e) {
+  if (!state.drawing) return;
+  e.preventDefault();
+  const {x, y} = getPos(e);
+  ctx.beginPath();
+  ctx.moveTo(state.lastX, state.lastY);
+  ctx.lineTo(x, y);
+  ctx.lineCap  = 'round';
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = state.penSize;
+  if (state.tool === 'erase') {
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.strokeStyle = 'rgba(0,0,0,1)';
+  } else {
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.strokeStyle = state.penColor;
+  }
+  ctx.stroke();
+  state.lastX = x;
+  state.lastY = y;
 }
 
-/* ========= MAIN ========= */
-.main {
-  margin-left: var(--sidebar-w);
-  flex: 1;
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  padding: 40px 24px;
-  min-height: 100vh;
-  transition: margin-left 0.3s;
+function endDraw() {
+  state.drawing = false;
+  ctx.globalCompositeOperation = 'source-over';
 }
 
-.main.full { margin-left: 0; }
+drawCanvas.addEventListener('mousedown',  startDraw);
+drawCanvas.addEventListener('mousemove',  moveDraw);
+drawCanvas.addEventListener('mouseup',    endDraw);
+drawCanvas.addEventListener('mouseleave', endDraw);
+drawCanvas.addEventListener('touchstart', startDraw, { passive: false });
+drawCanvas.addEventListener('touchmove',  moveDraw,  { passive: false });
+drawCanvas.addEventListener('touchend',   endDraw);
 
-.notebook-wrapper {
-  width: 100%;
-  max-width: var(--page-w);
+// Pen options
+penColor.addEventListener('input', e => state.penColor = e.target.value);
+penSize.addEventListener('input', e => {
+  state.penSize = parseInt(e.target.value);
+  penSizeLabel.textContent = state.penSize + 'px';
+});
+
+// ─── Signature Pad ───────────────────────────────────────
+let signDrawing = false, signLastX = 0, signLastY = 0;
+
+function openSignPad() {
+  sctx.clearRect(0, 0, signCanvas.width, signCanvas.height);
+  signOverlay.style.display = 'flex';
 }
 
-/* Page Header */
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 14px;
+function getSignPos(e) {
+  const rect = signCanvas.getBoundingClientRect();
+  const sx = signCanvas.width  / rect.width;
+  const sy = signCanvas.height / rect.height;
+  let cx, cy;
+  if (e.touches) { cx = e.touches[0].clientX; cy = e.touches[0].clientY; }
+  else           { cx = e.clientX;             cy = e.clientY; }
+  return { x: (cx - rect.left) * sx, y: (cy - rect.top) * sy };
 }
 
-#currentPageLabel {
-  font-family: 'Caveat', cursive;
-  font-size: 20px;
-  color: #555;
+signCanvas.addEventListener('mousedown',  e => { signDrawing = true; const p = getSignPos(e); signLastX = p.x; signLastY = p.y; });
+signCanvas.addEventListener('touchstart', e => { e.preventDefault(); signDrawing = true; const p = getSignPos(e); signLastX = p.x; signLastY = p.y; }, { passive: false });
+
+signCanvas.addEventListener('mousemove', e => {
+  if (!signDrawing) return;
+  const {x, y} = getSignPos(e);
+  sctx.beginPath();
+  sctx.moveTo(signLastX, signLastY);
+  sctx.lineTo(x, y);
+  sctx.strokeStyle = '#1a1a2e';
+  sctx.lineWidth = 2.5;
+  sctx.lineCap = 'round';
+  sctx.stroke();
+  signLastX = x; signLastY = y;
+});
+signCanvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  if (!signDrawing) return;
+  const {x, y} = getSignPos(e);
+  sctx.beginPath();
+  sctx.moveTo(signLastX, signLastY);
+  sctx.lineTo(x, y);
+  sctx.strokeStyle = '#1a1a2e';
+  sctx.lineWidth = 2.5;
+  sctx.lineCap = 'round';
+  sctx.stroke();
+  signLastX = x; signLastY = y;
+}, { passive: false });
+
+signCanvas.addEventListener('mouseup',  () => signDrawing = false);
+signCanvas.addEventListener('touchend', () => signDrawing = false);
+
+btnClearSign.addEventListener('click', () => sctx.clearRect(0, 0, signCanvas.width, signCanvas.height));
+
+btnSaveSign.addEventListener('click', () => {
+  const dataUrl = signCanvas.toDataURL();
+  placeImage(dataUrl, 80, 600);
+  signOverlay.style.display = 'none';
+  setTool('text');
+  showToast('Tanda tangan disimpan ✓');
+});
+
+btnCancelSign.addEventListener('click', () => {
+  signOverlay.style.display = 'none';
+  setTool('text');
+});
+
+// ─── Image Paste ─────────────────────────────────────────
+imageInput.addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    placeImage(ev.target.result, 80, 80);
+    showToast('Gambar ditempelkan ✓');
+  };
+  reader.readAsDataURL(file);
+  e.target.value = '';
+});
+
+// Drag-to-paste from clipboard
+document.addEventListener('paste', e => {
+  const items = e.clipboardData.items;
+  for (const item of items) {
+    if (item.type.startsWith('image/')) {
+      const blob = item.getAsFile();
+      const reader = new FileReader();
+      reader.onload = ev => placeImage(ev.target.result, 80, 80);
+      reader.readAsDataURL(blob);
+      showToast('Gambar ditempelkan dari clipboard ✓');
+    }
+  }
+});
+
+function placeImage(src, x, y) {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'pasted-image';
+  wrapper.style.left = x + 'px';
+  wrapper.style.top  = y + 'px';
+
+  const img = document.createElement('img');
+  img.src = src;
+  img.draggable = false;
+
+  const removeBtn = document.createElement('button');
+  removeBtn.className = 'img-remove';
+  removeBtn.textContent = '✕';
+  removeBtn.title = 'Hapus gambar';
+  removeBtn.addEventListener('click', () => wrapper.remove());
+
+  wrapper.appendChild(img);
+  wrapper.appendChild(removeBtn);
+  imageLayer.appendChild(wrapper);
+
+  makeDraggable(wrapper);
 }
 
-.page-actions { display: flex; gap: 8px; align-items: center; }
+function makeDraggable(el) {
+  let ox = 0, oy = 0, mx = 0, my = 0;
 
-.icon-btn {
-  width: 34px; height: 34px;
-  border: 1px solid #ccc;
-  border-radius: 8px;
-  background: white;
-  cursor: pointer;
-  font-size: 16px;
-  display: flex; align-items: center; justify-content: center;
-  transition: all 0.15s;
-}
-.icon-btn:hover { background: #f0f0f0; }
-.icon-btn.danger:hover { background: #ffe5e5; border-color: var(--danger); color: var(--danger); }
+  function dragStart(e) {
+    if (e.target.classList.contains('img-remove')) return;
+    e.preventDefault();
+    mx = e.clientX || e.touches[0].clientX;
+    my = e.clientY || e.touches[0].clientY;
+    document.addEventListener('mousemove', drag);
+    document.addEventListener('mouseup', dragEnd);
+    document.addEventListener('touchmove', drag, { passive: false });
+    document.addEventListener('touchend', dragEnd);
+  }
 
-/* ========= NOTEBOOK PAGE ========= */
-.notebook-page {
-  width: 100%;
-  min-height: var(--page-h);
-  background: var(--paper);
-  border-radius: 4px 12px 12px 4px;
-  box-shadow: var(--shadow), inset -1px 0 0 #ddd, -6px 0 0 #c9b99a, -12px 0 0 #b5a485;
-  position: relative;
-  overflow: hidden;
+  function drag(e) {
+    e.preventDefault();
+    const cx = e.clientX || e.touches[0].clientX;
+    const cy = e.clientY || e.touches[0].clientY;
+    ox = mx - cx; oy = my - cy;
+    mx = cx; my = cy;
+    el.style.left = (el.offsetLeft - ox) + 'px';
+    el.style.top  = (el.offsetTop  - oy) + 'px';
+  }
 
-  /* Lined paper */
-  background-image:
-    repeating-linear-gradient(
-      transparent,
-      transparent 31px,
-      var(--paper-line) 31px,
-      var(--paper-line) 32px
-    );
-  background-size: 100% 32px;
-  background-position: 0 40px;
+  function dragEnd() {
+    document.removeEventListener('mousemove', drag);
+    document.removeEventListener('mouseup', dragEnd);
+    document.removeEventListener('touchmove', drag);
+    document.removeEventListener('touchend', dragEnd);
+  }
+
+  el.addEventListener('mousedown',  dragStart);
+  el.addEventListener('touchstart', dragStart, { passive: false });
 }
 
-/* Red margin line */
-.notebook-page::before {
-  content: '';
-  position: absolute;
-  left: 72px; top: 0; bottom: 0;
-  width: 1.5px;
-  background: rgba(220, 100, 100, 0.35);
-  z-index: 1;
-  pointer-events: none;
+// ─── Page Management ─────────────────────────────────────
+btnAddPage.addEventListener('click', () => {
+  savePage();
+  state.pages.push(createPage());
+  state.currentPage = state.pages.length - 1;
+  loadPage(state.currentPage);
+  renderPageList();
+  showToast(`Halaman ${state.pages.length} ditambahkan ✓`);
+});
+
+btnPrevPage.addEventListener('click', () => {
+  if (state.currentPage > 0) switchPage(state.currentPage - 1);
+});
+
+btnNextPage.addEventListener('click', () => {
+  if (state.currentPage < state.pages.length - 1) switchPage(state.currentPage + 1);
+});
+
+btnDeletePage.addEventListener('click', () => {
+  if (state.pages.length <= 1) { showToast('Tidak bisa menghapus halaman terakhir!'); return; }
+  if (!confirm(`Hapus Halaman ${state.currentPage + 1}?`)) return;
+  state.pages.splice(state.currentPage, 1);
+  state.currentPage = Math.min(state.currentPage, state.pages.length - 1);
+  loadPage(state.currentPage);
+  renderPageList();
+  showToast('Halaman dihapus');
+});
+
+// ─── Export ──────────────────────────────────────────────
+btnExportPNG.addEventListener('click', () => {
+  savePage();
+  exportCurrentPage();
+});
+
+function exportCurrentPage() {
+  const rect = notebookPage.getBoundingClientRect();
+  const w = Math.round(rect.width);
+  const h = notebookPage.scrollHeight || Math.round(rect.height);
+
+  const offCanvas = document.createElement('canvas');
+  offCanvas.width  = w;
+  offCanvas.height = h;
+  const offCtx = offCanvas.getContext('2d');
+
+  // White background
+  offCtx.fillStyle = '#fdfaf3';
+  offCtx.fillRect(0, 0, w, h);
+
+  // Draw lines
+  offCtx.strokeStyle = '#e8e0cc';
+  offCtx.lineWidth = 1;
+  for (let y = 40 + 32; y < h; y += 32) {
+    offCtx.beginPath();
+    offCtx.moveTo(0, y);
+    offCtx.lineTo(w, y);
+    offCtx.stroke();
+  }
+
+  // Margin line
+  offCtx.strokeStyle = 'rgba(220,100,100,0.35)';
+  offCtx.lineWidth = 1.5;
+  offCtx.beginPath();
+  offCtx.moveTo(72, 0);
+  offCtx.lineTo(72, h);
+  offCtx.stroke();
+
+  // Draw canvas layer
+  offCtx.drawImage(drawCanvas, 0, 0);
+
+  // Text (via foreignObject in SVG)
+  const svgData = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">
+    <foreignObject width="100%" height="100%">
+      <div xmlns="http://www.w3.org/1999/xhtml" style="
+        font-family: 'Caveat', cursive;
+        font-size: 20px;
+        line-height: 32px;
+        color: #1a1a2e;
+        position: absolute;
+        top: 48px;
+        left: 84px;
+        right: 30px;
+        white-space: pre-wrap;
+        word-break: break-word;
+      ">${mainTextBlock.innerHTML}</div>
+    </foreignObject>
+  </svg>`;
+
+  const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+  const svgUrl  = URL.createObjectURL(svgBlob);
+  const svgImg  = new Image();
+
+  svgImg.onload = () => {
+    offCtx.drawImage(svgImg, 0, 0);
+    URL.revokeObjectURL(svgUrl);
+
+    // Images
+    const imgEls = imageLayer.querySelectorAll('.pasted-image');
+    let pending = imgEls.length;
+
+    function finalExport() {
+      const link = document.createElement('a');
+      link.download = `halaman-${state.currentPage + 1}.png`;
+      link.href = offCanvas.toDataURL('image/png');
+      link.click();
+      showToast('PNG tersimpan ✓');
+    }
+
+    if (!pending) { finalExport(); return; }
+    imgEls.forEach(wrapper => {
+      const img = wrapper.querySelector('img');
+      const x   = parseInt(wrapper.style.left) || 0;
+      const y   = parseInt(wrapper.style.top)  || 0;
+      const pImg = new Image();
+      pImg.crossOrigin = 'anonymous';
+      pImg.onload = () => {
+        offCtx.drawImage(pImg, x, y, pImg.naturalWidth > 300 ? 300 : pImg.naturalWidth, pImg.naturalHeight > 300 ? 300 : pImg.naturalHeight);
+        pending--;
+        if (!pending) finalExport();
+      };
+      pImg.onerror = () => { pending--; if (!pending) finalExport(); };
+      pImg.src = img.src;
+    });
+  };
+  svgImg.src = svgUrl;
 }
 
-/* Hole punches */
-.notebook-page::after {
-  content: '';
-  position: absolute;
-  left: 18px; top: 0; bottom: 0;
-  width: 20px;
-  background: repeating-linear-gradient(
-    to bottom,
-    transparent 0px,
-    transparent 80px,
-    rgba(0,0,0,0.06) 80px,
-    rgba(0,0,0,0.06) 100px
-  );
-  z-index: 1;
-  pointer-events: none;
+btnExportPDF.addEventListener('click', () => {
+  showToast('Untuk PDF, gunakan Print > Save as PDF di browser Anda');
+  setTimeout(() => window.print(), 500);
+});
+
+// ─── Hamburger ───────────────────────────────────────────
+hamburger.addEventListener('click', () => {
+  sidebar.classList.toggle('visible');
+  main.classList.toggle('full');
+});
+
+// ─── Toast ───────────────────────────────────────────────
+let toastTimer;
+function showToast(msg) {
+  toast.textContent = msg;
+  toast.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toast.classList.remove('show'), 2200);
 }
 
-/* Canvas layer */
-#drawCanvas {
-  position: absolute;
-  top: 0; left: 0;
-  width: 100%; height: 100%;
-  z-index: 10;
-  pointer-events: none;
-  touch-action: none;
-}
-#drawCanvas.active { pointer-events: all; cursor: crosshair; }
-#drawCanvas.eraser { cursor: cell; }
+// ─── Auto-expand page height ─────────────────────────────
+mainTextBlock.addEventListener('input', () => {
+  const minH = 900;
+  const scrollH = mainTextBlock.scrollHeight + 80;
+  if (scrollH > minH) {
+    notebookPage.style.minHeight = scrollH + 'px';
+  }
+});
 
-/* Text layer */
-.text-layer {
-  position: absolute;
-  top: 0; left: 0; right: 0; bottom: 0;
-  z-index: 5;
-  pointer-events: none;
-}
-.text-layer.active { pointer-events: all; }
+// ─── Init ────────────────────────────────────────────────
+function init() {
+  state.pages.push(createPage());
+  resizeCanvas();
+  loadPage(0);
+  renderPageList();
+  setTool('text');
 
-.text-block {
-  position: absolute;
-  top: 48px;
-  left: 84px;
-  right: 30px;
-  min-height: calc(var(--page-h) - 80px);
-  font-family: 'Caveat', cursive;
-  font-size: 20px;
-  line-height: 32px;
-  color: var(--ink);
-  outline: none;
-  white-space: pre-wrap;
-  word-break: break-word;
-  caret-color: #2255cc;
-}
+  // Keyboard shortcut hints
+  document.addEventListener('keydown', e => {
+    if (e.ctrlKey || e.metaKey) {
+      switch (e.key) {
+        case 'd': e.preventDefault(); setTool('draw'); break;
+        case 't': e.preventDefault(); setTool('text'); break;
+        case 'e': e.preventDefault(); setTool('erase'); break;
+      }
+    }
+  });
 
-.text-block:empty::before {
-  content: attr(data-placeholder);
-  color: #bbb;
-  pointer-events: none;
+  window.addEventListener('resize', () => {
+    resizeCanvas();
+    const p = state.pages[state.currentPage];
+    if (p && p.canvasData) {
+      const img = new Image();
+      img.onload = () => ctx.drawImage(img, 0, 0);
+      img.src = p.canvasData;
+    }
+  });
 }
 
-/* Image layer */
-.image-layer {
-  position: absolute;
-  top: 0; left: 0; right: 0; bottom: 0;
-  z-index: 8;
-  pointer-events: none;
-}
-.image-layer.active { pointer-events: all; }
-
-.pasted-image {
-  position: absolute;
-  cursor: move;
-  border: 2px dashed transparent;
-  transition: border 0.15s;
-  user-select: none;
-}
-.pasted-image:hover { border-color: #2255cc; }
-.pasted-image img { display: block; max-width: 300px; max-height: 300px; border-radius: 4px; }
-
-.pasted-image .img-remove {
-  position: absolute;
-  top: -10px; right: -10px;
-  background: var(--danger);
-  color: white;
-  border: none;
-  border-radius: 50%;
-  width: 22px; height: 22px;
-  cursor: pointer;
-  font-size: 12px;
-  display: none;
-  align-items: center;
-  justify-content: center;
-  z-index: 20;
-}
-.pasted-image:hover .img-remove { display: flex; }
-
-/* ========= SIGNATURE OVERLAY ========= */
-.sign-overlay {
-  position: absolute;
-  inset: 0;
-  background: rgba(0,0,0,0.45);
-  z-index: 100;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.sign-modal {
-  background: white;
-  border-radius: 14px;
-  padding: 24px;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 16px;
-}
-
-.sign-modal h3 {
-  font-family: 'Caveat', cursive;
-  font-size: 22px;
-  color: var(--ink);
-}
-
-#signCanvas {
-  border: 2px solid #ddd;
-  border-radius: 8px;
-  cursor: crosshair;
-  background: #fafafa;
-  touch-action: none;
-  max-width: 90vw;
-}
-
-.sign-actions {
-  display: flex;
-  gap: 10px;
-}
-
-.sign-actions button {
-  padding: 8px 20px;
-  border-radius: 8px;
-  border: 1px solid #ddd;
-  cursor: pointer;
-  font-family: 'DM Sans', sans-serif;
-  font-size: 14px;
-  background: white;
-  transition: background 0.15s;
-}
-.sign-actions button:hover { background: #f0f0f0; }
-.sign-actions button.primary {
-  background: var(--sidebar-bg);
-  color: white;
-  border-color: var(--sidebar-bg);
-}
-.sign-actions button.primary:hover { background: #2e2e50; }
-
-/* ========= TOAST ========= */
-.toast {
-  position: fixed;
-  bottom: 28px;
-  left: 50%;
-  transform: translateX(-50%) translateY(20px);
-  background: var(--sidebar-bg);
-  color: var(--sidebar-accent);
-  padding: 10px 22px;
-  border-radius: 30px;
-  font-size: 14px;
-  opacity: 0;
-  transition: opacity 0.3s, transform 0.3s;
-  pointer-events: none;
-  z-index: 999;
-  white-space: nowrap;
-}
-.toast.show {
-  opacity: 1;
-  transform: translateX(-50%) translateY(0);
-}
-
-/* ========= SCROLLBAR ========= */
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #ccc; border-radius: 6px; }
-
-/* ========= RESPONSIVE ========= */
-@media (max-width: 700px) {
-  .sidebar { transform: translateX(-100%); }
-  .sidebar.visible { transform: translateX(0); }
-  .hamburger { display: flex; }
-  .main { margin-left: 0 !important; padding: 60px 8px 24px; }
-  :root { --page-w: 100%; }
-}
+init();
