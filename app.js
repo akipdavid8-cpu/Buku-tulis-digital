@@ -1,124 +1,211 @@
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-  font-family: Arial, sans-serif;
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+let drawing = false;
+
+// MODE: pen = menulis, pencil = gambar, eraser = hapus
+let tool = "pen";
+
+let color = "#000000";
+let size = 3;
+
+// ================= DATA =================
+let pages = [];
+let currentPage = 0;
+
+let undoStack = [];
+let redoStack = [];
+
+// ================= RESIZE =================
+function resize() {
+  canvas.width = window.innerWidth * 0.95;
+  canvas.height = window.innerHeight * 0.85;
+}
+resize();
+window.addEventListener("resize", resize);
+
+// ================= TOOL =================
+function setTool(t) {
+  tool = t;
 }
 
-/* ================= BODY ================= */
-body {
-  background: #1e1e2f;
-  color: white;
-  overflow: hidden;
+function setColor(c) {
+  color = c;
 }
 
-/* ================= TOOLBAR ================= */
-.toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 10px;
-  background: rgba(0,0,0,0.6);
-  backdrop-filter: blur(10px);
-  border-bottom: 1px solid rgba(255,255,255,0.1);
-  align-items: center;
+function setSize(s) {
+  size = parseInt(s);
 }
 
-/* BUTTON STYLE */
-button {
-  padding: 8px 10px;
-  border: none;
-  border-radius: 8px;
-  background: #2d2d44;
-  color: white;
-  cursor: pointer;
-  transition: 0.2s;
-  font-size: 14px;
+// ================= DRAW SYSTEM =================
+canvas.addEventListener("mousedown", startDraw);
+canvas.addEventListener("mouseup", stopDraw);
+canvas.addEventListener("mousemove", draw);
+
+function startDraw(e) {
+  drawing = true;
+
+  ctx.beginPath();
+  ctx.moveTo(e.offsetX, e.offsetY);
+
+  saveState();
 }
 
-button:hover {
-  background: #3f3f66;
-  transform: scale(1.05);
+function stopDraw() {
+  drawing = false;
 }
 
-/* INPUT STYLE */
-input[type="text"] {
-  padding: 8px;
-  border-radius: 8px;
-  border: none;
-  outline: none;
-  background: #2d2d44;
-  color: white;
-  min-width: 150px;
-}
+function draw(e) {
+  if (!drawing) return;
 
-input[type="color"] {
-  width: 40px;
-  height: 35px;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  background: transparent;
-}
+  ctx.lineCap = "round";
 
-select {
-  padding: 8px;
-  border-radius: 8px;
-  border: none;
-  background: #2d2d44;
-  color: white;
-  cursor: pointer;
-}
+  if (tool === "eraser") {
+    ctx.globalCompositeOperation = "destination-out";
+    ctx.lineWidth = size * 2;
+  } else {
+    ctx.globalCompositeOperation = "source-over";
+    ctx.strokeStyle = color;
 
-/* FILE INPUT */
-input[type="file"] {
-  color: white;
-  font-size: 12px;
-}
-
-/* ================= CANVAS AREA ================= */
-.container {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: calc(100vh - 70px);
-  padding: 10px;
-}
-
-/* CANVAS (KERTAS NOTE) */
-canvas {
-  background: white;
-  border-radius: 12px;
-  width: 95vw;
-  height: 85vh;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-
-  /* seperti kertas */
-  background-image:
-    linear-gradient(to bottom, rgba(0,0,0,0.05) 1px, transparent 1px);
-  background-size: 100% 24px;
-}
-
-/* ================= MOBILE RESPONSIVE ================= */
-@media (max-width: 768px) {
-  .toolbar {
-    flex-direction: row;
-    overflow-x: auto;
-    white-space: nowrap;
+    if (tool === "pen") {
+      // lebih halus untuk tulisan
+      ctx.lineWidth = size * 0.7;
+    } else {
+      // pencil / gambar
+      ctx.lineWidth = size;
+    }
   }
 
-  button, select, input {
-    font-size: 12px;
-    padding: 6px;
-  }
+  ctx.lineTo(e.offsetX, e.offsetY);
+  ctx.stroke();
+}
 
-  canvas {
-    width: 98vw;
-    height: 80vh;
+// ================= UNDO / REDO =================
+function saveState() {
+  undoStack.push(canvas.toDataURL());
+  redoStack = [];
+}
+
+function undo() {
+  if (undoStack.length === 0) return;
+
+  redoStack.push(canvas.toDataURL());
+
+  let img = new Image();
+  img.src = undoStack.pop();
+
+  img.onload = () => {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0);
+  };
+}
+
+function redo() {
+  if (redoStack.length === 0) return;
+
+  let img = new Image();
+  img.src = redoStack.pop();
+
+  img.onload = () => {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0);
+  };
+}
+
+// ================= CLEAR =================
+function clearCanvas() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+}
+
+// ================= IMAGE UPLOAD =================
+function addImage(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+
+  reader.onload = function (e) {
+    const img = new Image();
+    img.src = e.target.result;
+
+    img.onload = function () {
+      ctx.drawImage(img, 50, 50, 200, 200);
+    };
+  };
+
+  reader.readAsDataURL(file);
+}
+
+// ================= NOTE SYSTEM =================
+function newNote() {
+  savePage();
+  pages = [];
+  currentPage = 0;
+  clearCanvas();
+  saveLocal();
+}
+
+function addPage() {
+  savePage();
+  clearCanvas();
+  currentPage++;
+}
+
+function savePage() {
+  pages[currentPage] = canvas.toDataURL();
+  saveLocal();
+}
+
+function loadPage(index) {
+  if (!pages[index]) return;
+
+  let img = new Image();
+  img.src = pages[index];
+
+  img.onload = () => {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0);
+  };
+}
+
+// ================= PDF EXPORT =================
+function savePDF() {
+  savePage();
+
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF();
+
+  pages.forEach((p, i) => {
+    if (p) {
+      pdf.addImage(p, "PNG", 10, 10, 180, 160);
+      if (i < pages.length - 1) pdf.addPage();
+    }
+  });
+
+  const title = document.getElementById("title")?.value || "catatan";
+  pdf.save(`${title}.pdf`);
+}
+
+// ================= LOCAL STORAGE =================
+function saveLocal() {
+  localStorage.setItem("smart_notes", JSON.stringify(pages));
+}
+
+function loadLocal() {
+  const data = localStorage.getItem("smart_notes");
+
+  if (data) {
+    pages = JSON.parse(data);
+    loadPage(0);
   }
 }
 
-/* ================= SCROLLBAR HIDE ================= */
-.toolbar::-webkit-scrollbar {
-  display: none;
-}
+// ================= AUTO SAVE =================
+window.addEventListener("beforeunload", () => {
+  savePage();
+});
+
+// ================= INIT =================
+window.onload = function () {
+  loadLocal();
+};
