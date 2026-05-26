@@ -1,124 +1,270 @@
+/* ===========================
+   BUKU TULIS DIGITAL - JS FIXED
+   =========================== */
 
-const canvas = document.getElementById("canvas");
-const ctx = canvas.getContext("2d");
+// ─── State ───────────────────────────────────────────────
+const state = {
+  pages: [],
+  currentPage: 0,
+  tool: 'text',
+  penColor: '#1a1a2e',
+  penSize: 3,
+  drawing: false,
+  lastX: 0,
+  lastY: 0,
 
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight - 50;
-
-let drawing = false;
-let tool = "pen";
-let color = "#000000";
-let pages = {};
-let currentPage = "page1";
-
-// SIDEBAR
-document.getElementById("menuBtn").onclick = () => {
-  let sb = document.getElementById("sidebar");
-  sb.style.left = sb.style.left === "0px" ? "-260px" : "0px";
+  // 🔥 UNDO / REDO STACK
+  undoStack: [],
+  redoStack: []
 };
 
-// DRAW
-canvas.addEventListener("mousedown", start);
-canvas.addEventListener("mouseup", stop);
-canvas.addEventListener("mousemove", draw);
+// ─── DOM ─────────────────────────────────────────────────
+const pageList       = document.getElementById('pageList');
+const btnAddPage     = document.getElementById('btnAddPage');
+const btnPrevPage    = document.getElementById('btnPrevPage');
+const btnNextPage    = document.getElementById('btnNextPage');
+const btnDeletePage  = document.getElementById('btnDeletePage');
+const currentPageLbl = document.getElementById('currentPageLabel');
 
-function start(e) {
-  drawing = true;
-  ctx.beginPath();
-  ctx.moveTo(e.clientX, e.clientY - 50);
-}
+const notebookPage  = document.getElementById('notebookPage');
+const drawCanvas    = document.getElementById('drawCanvas');
+const textLayer     = document.getElementById('textLayer');
+const mainTextBlock = document.getElementById('mainTextBlock');
+const imageLayer    = document.getElementById('imageLayer');
+const imageInput    = document.getElementById('imageInput');
+const signOverlay   = document.getElementById('signOverlay');
+const signCanvas    = document.getElementById('signCanvas');
 
-function stop() {
-  drawing = false;
-}
+const toolText  = document.getElementById('toolText');
+const toolDraw  = document.getElementById('toolDraw');
+const toolSign  = document.getElementById('toolSign');
+const toolImage = document.getElementById('toolImage');
+const toolErase = document.getElementById('toolErase');
 
-function draw(e) {
-  if (!drawing) return;
+const drawOptions = document.getElementById('drawOptions');
+const penColor    = document.getElementById('penColor');
+const penSize     = document.getElementById('penSize');
+const penSizeLabel= document.getElementById('penSizeLabel');
 
-  if (tool === "eraser") {
-    ctx.strokeStyle = "white";
-    ctx.lineWidth = 20;
-  } else if (tool === "brush") {
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 5;
-  } else {
-    ctx.strokeStyle = "#000";
-    ctx.lineWidth = 2;
-  }
+const btnExportPNG = document.getElementById('btnExportPNG');
+const btnExportPDF = document.getElementById('btnExportPDF');
+const toast        = document.getElementById('toast');
+const hamburger    = document.getElementById('hamburger');
+const sidebar      = document.getElementById('sidebar');
+const main         = document.getElementById('main');
 
-  ctx.lineTo(e.clientX, e.clientY - 50);
-  ctx.stroke();
-}
+// Undo/Redo buttons
+const btnUndo = document.getElementById('btnUndo');
+const btnRedo = document.getElementById('btnRedo');
 
-// TOOL
-function setTool(t) {
-  tool = t;
-}
+// ─── Canvas ctx ──────────────────────────────────────────
+const ctx = drawCanvas.getContext('2d');
+const sctx = signCanvas.getContext('2d');
 
-// COLOR
-function setColor(c) {
-  color = c;
-}
-
-// PAGE
-function newPage() {
-  currentPage = "page" + Date.now();
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  document.getElementById("pageTitle").value = "";
-}
-
-// SAVE
-function savePage() {
-  pages[currentPage] = canvas.toDataURL();
-  localStorage.setItem("pages", JSON.stringify(pages));
-  loadHistory();
-}
-
-// LOAD HISTORY
-function loadHistory() {
-  let history = document.getElementById("history");
-  history.innerHTML = "";
-
-  for (let key in pages) {
-    let btn = document.createElement("button");
-    btn.innerText = key;
-    btn.onclick = () => loadPage(key);
-    history.appendChild(btn);
-  }
-}
-
-// LOAD PAGE
-function loadPage(key) {
-  let img = new Image();
-  img.src = pages[key];
-  img.onload = () => ctx.drawImage(img, 0, 0);
-}
-
-// IMAGE UPLOAD
-function uploadImage(e) {
-  let file = e.target.files[0];
-  let img = new Image();
-  img.src = URL.createObjectURL(file);
-
-  img.onload = () => {
-    ctx.drawImage(img, 50, 50, 200, 200);
+// ─── PAGE DATA ───────────────────────────────────────────
+function createPage() {
+  return {
+    canvasData: null,
+    textContent: '',
+    images: []
   };
 }
 
-// PDF UPLOAD (simple view)
-function uploadPDF(e) {
-  alert("PDF diupload (fitur preview sederhana).");
+// ─── SAVE STATE (UNDO SUPPORT) ───────────────────────────
+function pushHistory() {
+  const snapshot = {
+    canvas: drawCanvas.toDataURL(),
+    text: mainTextBlock.innerHTML,
+    images: imageLayer.innerHTML
+  };
+
+  state.undoStack.push(snapshot);
+  if (state.undoStack.length > 30) state.undoStack.shift();
+
+  state.redoStack = [];
 }
 
-// EXPORT PDF
-function exportPDF() {
-  const img = canvas.toDataURL("image/png");
-  let win = window.open();
-  win.document.write(`<img src="${img}" />`);
+// ─── UNDO ────────────────────────────────────────────────
+function undo() {
+  if (!state.undoStack.length) return;
+
+  const current = {
+    canvas: drawCanvas.toDataURL(),
+    text: mainTextBlock.innerHTML,
+    images: imageLayer.innerHTML
+  };
+  state.redoStack.push(current);
+
+  const prev = state.undoStack.pop();
+  restoreSnapshot(prev);
 }
 
-// INIT
-window.onload = () => {
-  pages = JSON.parse(localStorage.getItem("pages")) || {};
-  loadHistory();
+// ─── REDO ────────────────────────────────────────────────
+function redo() {
+  if (!state.redoStack.length) return;
+
+  const current = {
+    canvas: drawCanvas.toDataURL(),
+    text: mainTextBlock.innerHTML,
+    images: imageLayer.innerHTML
+  };
+  state.undoStack.push(current);
+
+  const next = state.redoStack.pop();
+  restoreSnapshot(next);
+}
+
+// ─── RESTORE SNAPSHOT ────────────────────────────────────
+function restoreSnapshot(s) {
+  if (!s) return;
+
+  const img = new Image();
+  img.onload = () => {
+    ctx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+    ctx.drawImage(img, 0, 0);
+  };
+  img.src = s.canvas;
+
+  mainTextBlock.innerHTML = s.text;
+  imageLayer.innerHTML = s.images;
+}
+
+// ─── PAGE SYSTEM ─────────────────────────────────────────
+function switchPage(index) {
+  savePage();
+  state.currentPage = index;
+  loadPage(index);
+  renderPageList();
+}
+
+// ─── SAVE PAGE ───────────────────────────────────────────
+function savePage() {
+  pushHistory();
+
+  const p = state.pages[state.currentPage];
+  if (!p) return;
+
+  p.canvasData = drawCanvas.toDataURL();
+  p.textContent = mainTextBlock.innerHTML;
+  p.images = imageLayer.innerHTML;
+}
+
+// ─── LOAD PAGE ───────────────────────────────────────────
+function loadPage(index) {
+  const p = state.pages[index];
+  if (!p) return;
+
+  resizeCanvas();
+  ctx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+
+  if (p.canvasData) {
+    const img = new Image();
+    img.onload = () => ctx.drawImage(img, 0, 0);
+    img.src = p.canvasData;
+  }
+
+  mainTextBlock.innerHTML = p.textContent || '';
+  imageLayer.innerHTML = p.images || '';
+
+  currentPageLbl.textContent = `Halaman ${index + 1}`;
+}
+
+// ─── RENDER PAGE LIST ────────────────────────────────────
+function renderPageList() {
+  pageList.innerHTML = '';
+  state.pages.forEach((_, i) => {
+    const el = document.createElement('div');
+    el.className = 'page-item' + (i === state.currentPage ? ' active' : '');
+    el.textContent = `📄 Halaman ${i + 1}`;
+    el.onclick = () => switchPage(i);
+    pageList.appendChild(el);
+  });
+}
+
+// ─── CANVAS RESIZE ───────────────────────────────────────
+function resizeCanvas() {
+  const rect = notebookPage.getBoundingClientRect();
+  drawCanvas.width = rect.width;
+  drawCanvas.height = rect.height;
+}
+
+// ─── DRAWING ─────────────────────────────────────────────
+function getPos(e) {
+  const rect = drawCanvas.getBoundingClientRect();
+  return {
+    x: (e.clientX || e.touches[0].clientX) - rect.left,
+    y: (e.clientY || e.touches[0].clientY) - rect.top
+  };
+}
+
+function startDraw(e) {
+  if (state.tool !== 'draw' && state.tool !== 'erase') return;
+
+  pushHistory();
+
+  state.drawing = true;
+  const p = getPos(e);
+  state.lastX = p.x;
+  state.lastY = p.y;
+}
+
+function moveDraw(e) {
+  if (!state.drawing) return;
+
+  const p = getPos(e);
+
+  ctx.beginPath();
+  ctx.moveTo(state.lastX, state.lastY);
+  ctx.lineTo(p.x, p.y);
+
+  ctx.lineWidth = state.penSize;
+  ctx.strokeStyle = state.tool === 'erase' ? '#fff' : state.penColor;
+  ctx.globalCompositeOperation = state.tool === 'erase'
+    ? 'destination-out'
+    : 'source-over';
+
+  ctx.stroke();
+
+  state.lastX = p.x;
+  state.lastY = p.y;
+}
+
+function endDraw() {
+  state.drawing = false;
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+// ─── EVENTS ──────────────────────────────────────────────
+drawCanvas.addEventListener('mousedown', startDraw);
+drawCanvas.addEventListener('mousemove', moveDraw);
+drawCanvas.addEventListener('mouseup', endDraw);
+drawCanvas.addEventListener('mouseleave', endDraw);
+
+drawCanvas.addEventListener('touchstart', startDraw, { passive: false });
+drawCanvas.addEventListener('touchmove', moveDraw, { passive: false });
+drawCanvas.addEventListener('touchend', endDraw);
+
+// ─── TOOL BUTTONS ────────────────────────────────────────
+toolDraw.onclick = () => state.tool = 'draw';
+toolText.onclick = () => state.tool = 'text';
+toolErase.onclick = () => state.tool = 'erase';
+
+// ─── UNDO / REDO BUTTONS ────────────────────────────────
+btnUndo.onclick = undo;
+btnRedo.onclick = redo;
+
+// ─── HAMBURGER FIX ───────────────────────────────────────
+hamburger.onclick = () => {
+  sidebar.classList.toggle('hidden');
+  main.classList.toggle('full');
 };
+
+// ─── INIT ────────────────────────────────────────────────
+function init() {
+  state.pages.push(createPage());
+  resizeCanvas();
+  loadPage(0);
+  renderPageList();
+}
+
+init();
