@@ -1,28 +1,29 @@
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 
+// ================= STATE =================
 let drawing = false;
-
-// MODE: pen = menulis, pencil = gambar, eraser = hapus
 let tool = "pen";
 
 let color = "#000000";
 let size = 3;
 
-// ================= DATA =================
 let pages = [];
 let currentPage = 0;
 
 let undoStack = [];
 let redoStack = [];
 
-// ================= RESIZE =================
-function resize() {
-  canvas.width = window.innerWidth * 0.95;
-  canvas.height = window.innerHeight * 0.85;
+// ================= CANVAS SIZE =================
+function resizeCanvas() {
+  canvas.width = canvas.offsetWidth;
+  canvas.height = canvas.offsetHeight;
+
+  loadPage(currentPage);
 }
-resize();
-window.addEventListener("resize", resize);
+
+window.addEventListener("resize", resizeCanvas);
+resizeCanvas();
 
 // ================= TOOL =================
 function setTool(t) {
@@ -37,26 +38,41 @@ function setSize(s) {
   size = parseInt(s);
 }
 
-// ================= DRAW SYSTEM =================
-canvas.addEventListener("mousedown", startDraw);
-canvas.addEventListener("mouseup", stopDraw);
-canvas.addEventListener("mousemove", draw);
+// ================= POSITION =================
+function getPos(e) {
+  const rect = canvas.getBoundingClientRect();
 
+  if (e.touches) {
+    return {
+      x: e.touches[0].clientX - rect.left,
+      y: e.touches[0].clientY - rect.top
+    };
+  }
+
+  return {
+    x: e.offsetX,
+    y: e.offsetY
+  };
+}
+
+// ================= DRAW =================
 function startDraw(e) {
   drawing = true;
 
-  ctx.beginPath();
-  ctx.moveTo(e.offsetX, e.offsetY);
-
   saveState();
-}
 
-function stopDraw() {
-  drawing = false;
+  const pos = getPos(e);
+
+  ctx.beginPath();
+  ctx.moveTo(pos.x, pos.y);
+
+  e.preventDefault();
 }
 
 function draw(e) {
   if (!drawing) return;
+
+  const pos = getPos(e);
 
   ctx.lineCap = "round";
 
@@ -68,21 +84,42 @@ function draw(e) {
     ctx.strokeStyle = color;
 
     if (tool === "pen") {
-      // lebih halus untuk tulisan
       ctx.lineWidth = size * 0.7;
-    } else {
-      // pencil / gambar
+    }
+
+    if (tool === "pencil") {
       ctx.lineWidth = size;
     }
   }
 
-  ctx.lineTo(e.offsetX, e.offsetY);
+  ctx.lineTo(pos.x, pos.y);
   ctx.stroke();
+
+  e.preventDefault();
 }
 
-// ================= UNDO / REDO =================
+function stopDraw() {
+  drawing = false;
+}
+
+// ================= EVENT PC =================
+canvas.addEventListener("mousedown", startDraw);
+canvas.addEventListener("mousemove", draw);
+canvas.addEventListener("mouseup", stopDraw);
+
+// ================= EVENT HP =================
+canvas.addEventListener("touchstart", startDraw);
+canvas.addEventListener("touchmove", draw);
+canvas.addEventListener("touchend", stopDraw);
+
+// ================= UNDO =================
 function saveState() {
   undoStack.push(canvas.toDataURL());
+
+  if (undoStack.length > 20) {
+    undoStack.shift();
+  }
+
   redoStack = [];
 }
 
@@ -91,7 +128,7 @@ function undo() {
 
   redoStack.push(canvas.toDataURL());
 
-  let img = new Image();
+  const img = new Image();
   img.src = undoStack.pop();
 
   img.onload = () => {
@@ -103,7 +140,7 @@ function undo() {
 function redo() {
   if (redoStack.length === 0) return;
 
-  let img = new Image();
+  const img = new Image();
   img.src = redoStack.pop();
 
   img.onload = () => {
@@ -112,23 +149,62 @@ function redo() {
   };
 }
 
-// ================= CLEAR =================
-function clearCanvas() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+// ================= PAGE SYSTEM =================
+function savePage() {
+  pages[currentPage] = canvas.toDataURL();
+  saveLocal();
 }
 
-// ================= IMAGE UPLOAD =================
+function loadPage(index) {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  if (!pages[index]) return;
+
+  const img = new Image();
+  img.src = pages[index];
+
+  img.onload = () => {
+    ctx.drawImage(img, 0, 0);
+  };
+}
+
+function addPage() {
+  savePage();
+
+  currentPage++;
+
+  if (!pages[currentPage]) {
+    pages[currentPage] = null;
+  }
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  alert("Halaman baru dibuat");
+}
+
+function newNote() {
+  pages = [];
+  currentPage = 0;
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  saveLocal();
+}
+
+// ================= IMAGE =================
 function addImage(event) {
   const file = event.target.files[0];
+
   if (!file) return;
 
   const reader = new FileReader();
 
-  reader.onload = function (e) {
+  reader.onload = function(e) {
     const img = new Image();
+
     img.src = e.target.result;
 
-    img.onload = function () {
+    img.onload = function() {
       ctx.drawImage(img, 50, 50, 200, 200);
     };
   };
@@ -136,66 +212,45 @@ function addImage(event) {
   reader.readAsDataURL(file);
 }
 
-// ================= NOTE SYSTEM =================
-function newNote() {
-  savePage();
-  pages = [];
-  currentPage = 0;
-  clearCanvas();
-  saveLocal();
-}
-
-function addPage() {
-  savePage();
-  clearCanvas();
-  currentPage++;
-}
-
-function savePage() {
-  pages[currentPage] = canvas.toDataURL();
-  saveLocal();
-}
-
-function loadPage(index) {
-  if (!pages[index]) return;
-
-  let img = new Image();
-  img.src = pages[index];
-
-  img.onload = () => {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(img, 0, 0);
-  };
-}
-
-// ================= PDF EXPORT =================
+// ================= PDF =================
 function savePDF() {
   savePage();
 
   const { jsPDF } = window.jspdf;
   const pdf = new jsPDF();
 
-  pages.forEach((p, i) => {
-    if (p) {
-      pdf.addImage(p, "PNG", 10, 10, 180, 160);
-      if (i < pages.length - 1) pdf.addPage();
+  pages.forEach((page, index) => {
+    if (!page) return;
+
+    pdf.addImage(page, "PNG", 10, 10, 180, 250);
+
+    if (index < pages.length - 1) {
+      pdf.addPage();
     }
   });
 
-  const title = document.getElementById("title")?.value || "catatan";
-  pdf.save(`${title}.pdf`);
+  const title =
+    document.getElementById("title").value || "catatan";
+
+  pdf.save(title + ".pdf");
 }
 
 // ================= LOCAL STORAGE =================
 function saveLocal() {
-  localStorage.setItem("smart_notes", JSON.stringify(pages));
+  localStorage.setItem(
+    "smart_notes_pages",
+    JSON.stringify(pages)
+  );
 }
 
 function loadLocal() {
-  const data = localStorage.getItem("smart_notes");
+  const data = localStorage.getItem(
+    "smart_notes_pages"
+  );
 
   if (data) {
     pages = JSON.parse(data);
+
     loadPage(0);
   }
 }
@@ -206,6 +261,6 @@ window.addEventListener("beforeunload", () => {
 });
 
 // ================= INIT =================
-window.onload = function () {
+window.onload = () => {
   loadLocal();
 };
